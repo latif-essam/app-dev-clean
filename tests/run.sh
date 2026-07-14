@@ -50,6 +50,11 @@ PROJECT_ROOT=""; APP_TYPE=""
 check "resolve in plainjs fails" "1" "$( resolve_root "$FIX/plainjs" >/dev/null 2>&1; echo $? )"
 check "resolve in empty fails" "1" "$( resolve_root "$FIX/empty" >/dev/null 2>&1; echo $? )"
 
+echo "== menu return code (set -e regression: menu must return 0) =="
+MENU_ROWS=(); while IFS= read -r line; do MENU_ROWS+=("$line"); done < <(rn_menu_rows)
+check "menu returns 0 on empty ENTER"      "0" "$( printf '\n'  | menu >/dev/null 2>&1; echo $? )"
+check "menu returns 0 after SPACE+ENTER"   "0" "$( printf ' \n' | menu >/dev/null 2>&1; echo $? )"
+
 rm -rf "$FIX"
 echo
 printf "PASS=%d FAIL=%d\n" "$pass" "$fail"

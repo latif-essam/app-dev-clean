@@ -128,4 +128,5 @@ menu() {
   for x in "${!checked[@]}"; do
     [ "${checked[$x]}" = "1" ] && SELECTED_TARGETS+=("${targets_all[$x]}")
   done
+  return 0
 }

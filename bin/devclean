@@ -91,6 +91,7 @@ run_targets() {
     post_fn="${APP_POST_FN[$idx]}"
     [ -n "$post_fn" ] && "$post_fn" "${targets[@]}"
   fi
+  return 0
 }
 
 main() {
