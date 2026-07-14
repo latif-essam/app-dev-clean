@@ -3,7 +3,7 @@ class Devclean < Formula
   homepage "https://example.com/devclean"
   # Local-only for now: build from the local git repo's HEAD.
   #   brew install --HEAD latif/tools/devclean
-  head "file:///Users/latifessam/dev-tools/devclean", using: :git
+  head "file:///Users/latifessam/dev-tools/devclean", using: :git, branch: "main"
 
   # To promote to a GitHub-hosted release later, replace the `head` line above
   # with a tagged tarball, e.g.:
