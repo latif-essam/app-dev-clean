@@ -126,6 +126,7 @@ rn_post() {
     read -r -p "  Run 'pod install' now? [y/N] " rp
     [[ "$rp" =~ ^[Yy]$ ]] && rn_reinstall_pods
   fi
+  return 0
 }
 
 register_app rn rn_markers rn_menu_rows rn_run rn_post
