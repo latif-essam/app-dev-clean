@@ -1,16 +1,17 @@
-# devclean — Cross-Platform Go Rewrite Design
+# app-dev-clean — Cross-Platform Go Rewrite Design
 
 **Date:** 2026-07-22
 **Status:** Approved (brainstorming) — pending implementation plan
 **Supersedes runtime of:** `docs/plans/2026-07-14-devclean.md` (bash version)
+**Name:** `app-dev-clean` (binary, repo, npm-free). **License:** MIT © Latif Essam.
 
 ## Goal
 
-Turn `devclean` from a macOS-only bash tool into a **single cross-platform Go
-binary** that runs first-class on Windows, macOS, and Linux (intel + arm),
-installs through mainstream package managers, and cleans dev caches for
-whatever project type(s) you're standing in — resolving the real project root by
-walking up from cwd, exactly like the bash version does today.
+Turn `app-dev-clean` (formerly the macOS-only bash `devclean`) into a **single
+cross-platform Go binary** that runs first-class on Windows, macOS, and Linux
+(intel + arm), installs through mainstream package managers, and cleans dev
+caches for whatever project type(s) you're standing in — resolving the real
+project root by walking up from cwd, exactly like the bash version does today.
 
 One tool, many pluggable detectors. Not sub-tools per platform.
 
@@ -23,27 +24,32 @@ One tool, many pluggable detectors. Not sub-tools per platform.
 - **No live pre-delete size scan in the interactive menu.** `--dry-run` (shows
   estimated space to free) plus a post-run "reclaimed" total is enough. Live
   per-row sizing can be added later if wanted.
-- **No sub-tool split** (`devclean-rn`, `devclean-flutter`, …). One binary,
+- **No sub-tool split** (`app-dev-clean-rn`, `-flutter`, …). One binary,
   scoping via `--type`.
 
 ## Architecture
 
 ### Language & repo
 
-- **Go 1.23+**, module path `github.com/latif-essam/devclean`, binary `devclean`.
+- **Go 1.23+**, module path `github.com/latif-essam/app-dev-clean`, binary
+  `app-dev-clean`.
+- **Optional short alias:** installers may also drop a `adc` symlink/shim to the
+  same binary so the long name need not be typed every time. Canonical name
+  stays `app-dev-clean`; `adc` is convenience only.
 - **Reuse the existing repo** at `~/dev-tools/devclean` — preserve git history
   (3 commits + the bash implementation). Create GitHub remote
-  `github.com/latif-essam/devclean` (public) and push.
+  `github.com/latif-essam/app-dev-clean` (public) and push. The local checkout
+  dir may be renamed to `app-dev-clean` to match, or left as-is (cosmetic only).
 - **Transition strategy:** develop the Go rewrite on branch `go-rewrite`. Keep
   `main` (bash) working and installable until the Go version reaches feature
-  parity and green tests. Then fast-forward/merge to `main`, remove the bash
-  `bin/lib/apps` tree, and cut the first tagged release. No period where the
-  installed tool is broken.
+  parity and green tests. Then merge to `main`, remove the bash `bin/lib/apps`
+  tree, and cut the first tagged release. No period where the installed tool is
+  broken.
 
 ### Repo layout (target)
 
 ```
-devclean/
+app-dev-clean/
   main.go                     # thin: build cli, run, os.Exit(code)
   internal/
     detect/
@@ -70,6 +76,7 @@ devclean/
     release.yml               # goreleaser on tag push
   install.sh                  # curl | bash  (mac/linux)
   install.ps1                 # irm | iex     (windows)
+  LICENSE                     # MIT
   docs/superpowers/specs/2026-07-22-devclean-crossplatform-design.md
   README.md
 ```
@@ -186,6 +193,8 @@ raw cwd. Global targets touch shared `~`/`%USERPROFILE%` caches and are gated.
 
 - **`--dry-run`:** resolve targets, walk their paths, print each path and an
   **estimated space that would be freed** (sum of dir sizes), delete nothing.
+  Dry-run must NOT run destructive external commands (`gradlew clean`,
+  `flutter clean`) — it only reports the paths those would touch.
 - **Reclaimed report:** after a real run, print total space freed.
 - **`--type <name>`:** restrict to one detector even when the repo matches
   several (e.g. `--type flutter` in a repo that also has native `android/`).
@@ -195,17 +204,20 @@ raw cwd. Global targets touch shared `~`/`%USERPROFILE%` caches and are gated.
 ## CLI surface
 
 ```
-devclean                 interactive menu (must be inside a known project)
-devclean <target>...     run named targets (e.g. ios js metro)
-devclean local-all       all local targets for detected type(s)
-devclean nuclear         local-all + global caches + reinstall (confirmed)
-devclean --type <t>      scope to one detector (rn|android|ios|flutter|expo)
-devclean --dry-run       show what would be freed; delete nothing
-devclean -y, --yes       skip confirmation prompts
-devclean --root          print resolved project root + detected type(s)
-devclean --version       print version
-devclean --help          usage
+app-dev-clean                 interactive menu (must be inside a known project)
+app-dev-clean <target>...     run named targets (e.g. ios js metro)
+app-dev-clean local-all       all local targets for detected type(s)
+app-dev-clean nuclear         local-all + global caches + reinstall (confirmed)
+app-dev-clean --type <t>      scope to one detector (rn|android|ios|flutter|expo)
+app-dev-clean --dry-run       show what would be freed; delete nothing
+app-dev-clean -y, --yes       skip confirmation prompts
+app-dev-clean --root          print resolved project root + detected type(s)
+app-dev-clean --version       print version
+app-dev-clean --help          usage
 ```
+
+(`adc` works as a short alias for all of the above if the alias shim is
+installed.)
 
 Global targets (project-agnostic): `gradle-global`, `xcode-dd` (mac),
 `pods-cache` (mac), `pub-cache`.
@@ -227,19 +239,28 @@ which runs goreleaser to produce:
 - **GitHub Releases:** archives for `darwin/linux/windows` × `amd64/arm64` plus a
   checksums file. Version embedded via ldflags.
 - **Homebrew:** goreleaser auto-commits/updates a formula in tap repo
-  `latif-essam/homebrew-tap` → `brew install latif-essam/tap/devclean`.
-- **Scoop:** goreleaser auto-updates a manifest in a scoop bucket repo →
-  `scoop install devclean` (Windows).
+  `latif-essam/homebrew-tap` → `brew install latif-essam/tap/app-dev-clean`.
+- **Scoop:** goreleaser auto-updates a manifest in bucket repo
+  `latif-essam/scoop-bucket` → `scoop install app-dev-clean` (Windows).
 - **Install scripts** (committed in-repo):
-  - `install.sh` — `curl -fsSL https://raw.githubusercontent.com/latif-essam/devclean/main/install.sh | bash`
+  - `install.sh` — `curl -fsSL https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.sh | bash`
     detects OS/arch, downloads the matching release archive, installs to
-    `~/.local/bin` (or `/usr/local/bin`).
-  - `install.ps1` — `irm https://raw.githubusercontent.com/latif-essam/devclean/main/install.ps1 | iex`
+    `~/.local/bin` (or `/usr/local/bin`), optional `adc` alias.
+  - `install.ps1` — `irm https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.ps1 | iex`
     for Windows PowerShell.
-- **`go install github.com/latif-essam/devclean@latest`** works for Go users
-  with no extra setup.
+- **`go install github.com/latif-essam/app-dev-clean@latest`** works for Go
+  users with no extra setup.
 
 winget: deferred (documented as future).
+
+### What the maintainer must provide (one-time)
+
+- Public repos: `app-dev-clean` (main), `homebrew-tap`, `scoop-bucket`
+  (all creatable via `gh`).
+- A GitHub Personal Access Token with **Contents: read/write** on the tap +
+  bucket repos, stored in the main repo as the Actions secret
+  `HOMEBREW_TAP_GITHUB_TOKEN` (the built-in `GITHUB_TOKEN` cannot push
+  cross-repo). This is the only manual, non-automatable step.
 
 ## Testing
 
@@ -255,6 +276,12 @@ winget: deferred (documented as future).
 - **CI (`ci.yml`):** run `go test ./...` on ubuntu + macos + windows runners on
   every push/PR. Release job gated on green CI.
 
+## README (written during implementation)
+
+Covers: one-liner + screenshot/gif, the full install matrix (Homebrew, Scoop,
+install scripts, `go install`, release binaries), usage + all flags, the safety
+model, "adding a detector" guide, contributing, MIT license.
+
 ## Migration / rollout
 
 1. Branch `go-rewrite` off `main`.
@@ -262,16 +289,19 @@ winget: deferred (documented as future).
 3. Green `go test ./...` on all three OSes in CI.
 4. Wire goreleaser + install scripts; dry-run a release build locally
    (`goreleaser release --snapshot --clean`).
-5. Create GitHub repo, push, create `homebrew-tap` + scoop bucket repos.
-6. Merge to `main`, remove bash tree, tag `v0.1.0`, verify install on each OS.
-7. Update README (install matrix, usage, adding a detector).
+5. Create GitHub repos, push, create `homebrew-tap` + `scoop-bucket`; add the
+   `HOMEBREW_TAP_GITHUB_TOKEN` secret.
+6. Merge to `main`, remove bash tree, add `LICENSE` (MIT), tag `v0.1.0`, verify
+   install on each OS.
+7. Finalize README (install matrix, usage, adding a detector).
 
 ## Open items to resolve during planning
 
-- Confirm tap/bucket repo names (`latif-essam/homebrew-tap`, scoop bucket name).
-- Decide `flutter clean` / `gradlew clean` invocation policy under `--dry-run`
-  (dry-run must NOT run destructive external commands — only report paths).
+- Confirm final tap/bucket repo names (`latif-essam/homebrew-tap`,
+  `latif-essam/scoop-bucket`).
 - Windows path/permission edge cases for locked files (e.g. Gradle daemon
   holding a handle) — clean engine should tolerate per-path failures like the
   bash `nuke` does and continue.
+- Whether to rename the local checkout dir `~/dev-tools/devclean` →
+  `app-dev-clean` (cosmetic; remote name is what matters).
 ```
