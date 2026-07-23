@@ -49,7 +49,6 @@ go mod edit -go=1.23
 package main
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -69,7 +68,6 @@ func TestVersionFlag(t *testing.T) {
 	if !strings.Contains(string(out), "9.9.9") {
 		t.Fatalf("want version 9.9.9 in output, got %q", out)
 	}
-	_ = os.Stdout
 }
 ```
 
@@ -272,7 +270,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Consumes: `platform.Paths` (Task 2).
 - Produces:
   - `type Scope int` with `const ( Local Scope = iota; Global )`.
-  - `type Context struct { ProjectRoot string; Paths platform.Paths; DryRun, Yes bool }`.
+  - `type Context struct { ProjectRoot string; Paths platform.Paths; DryRun, Yes, Force bool }` (`Force` = nuclear reinstall without prompting).
   - `type Target struct { Name, Label, Desc string; Scope Scope; Paths func(Context) []string; Run func(Context) (freed int64, err error) }`.
   - `type Detector interface { Name() string; Detect(dir string) bool; Targets() []Target }`.
   - `type PostRunner interface { PostRun(ctx Context, ran []string) error }` (optional, type-asserted).
@@ -336,6 +334,7 @@ type Context struct {
 	Paths       platform.Paths
 	DryRun      bool
 	Yes         bool
+	Force       bool // nuclear: run reinstall without prompting
 }
 
 type Target struct {
@@ -527,12 +526,19 @@ func Exec(dryRun bool, dir, name string, args ...string) {
 		fmt.Printf("  [dry-run] would run: %s %s\n", name, strings.Join(args, " "))
 		return
 	}
-	if _, err := exec.LookPath(name); err != nil {
-		// name may be a relative path like ./gradlew; try it directly.
-		if _, statErr := os.Stat(filepath.Join(dir, name)); statErr != nil {
+	// A name containing a path separator is an explicit executable path
+	// (e.g. an absolute gradlew path) — stat it directly. Otherwise resolve
+	// via PATH. Never pass a bare relative path like "./gradlew" to
+	// exec.Command: its resolution is NOT relative to cmd.Dir and varies by
+	// OS/Go version — callers must pass an absolute path instead.
+	if strings.ContainsAny(name, `/\`) {
+		if _, err := os.Stat(name); err != nil {
 			fmt.Printf("  ! %s not found; skipping\n", name)
 			return
 		}
+	} else if _, err := exec.LookPath(name); err != nil {
+		fmt.Printf("  ! %s not found; skipping\n", name)
+		return
 	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
@@ -945,12 +951,15 @@ func androidLocalPaths(root string) []string {
 }
 
 func androidLocal(ctx detect.Context) (int64, error) {
-	wrapper := "./gradlew"
+	wrapperName := "gradlew"
 	if isWindows() {
-		wrapper = "gradlew.bat"
+		wrapperName = "gradlew.bat"
 	}
-	if exists(filepath.Join(ctx.ProjectRoot, filepath.Base(wrapper))) {
-		clean.Exec(ctx.DryRun, ctx.ProjectRoot, wrapper, "clean")
+	wrapperPath := filepath.Join(ctx.ProjectRoot, wrapperName)
+	if exists(wrapperPath) {
+		// Pass the ABSOLUTE wrapper path: bare "./gradlew" does not resolve
+		// relative to cmd.Dir in os/exec (see clean.Exec).
+		clean.Exec(ctx.DryRun, ctx.ProjectRoot, wrapperPath, "clean")
 	}
 	return clean.Remove(ctx.DryRun, androidLocalPaths(ctx.ProjectRoot)...), nil
 }
@@ -1122,8 +1131,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Consumes: `androidLocal`/`iosLocal` (Tasks 7–8), `clean`, `platform.Paths.TmpDir`.
 - Produces:
   - `func pkgJSONHas(dir, needle string) bool` (package-level, reused by expo).
+  - `func containsStr(sl []string, s string) bool` (package-level, reused by expo/flutter tests if needed).
   - `func rnJS(ctx) (int64, error)`, `func rnMetro(ctx) (int64, error)`, `func rnWatchman(ctx) (int64, error)`.
-  - `type rn struct{}` implementing `detect.Detector` + `detect.PostRunner`; registered via `init()`.
+  - `type rn struct{}` implementing `detect.Detector` + `detect.PostRunner`; PostRun honors `ctx.DryRun`/`ctx.Force`/`ctx.Yes`; registered via `init()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1258,23 +1268,33 @@ func (rn) Targets() []detect.Target {
 	}
 }
 
-// PostRun offers reinstall after a js/ios clean (interactive only).
+// PostRun handles reinstall after a js/ios clean:
+//   - dry-run: never reinstall
+//   - Force (nuclear): reinstall unconditionally, no prompt
+//   - Yes (non-interactive, non-nuclear): skip reinstall
+//   - otherwise (interactive): prompt per action
 func (rn) PostRun(ctx detect.Context, ran []string) error {
+	if ctx.DryRun {
+		return nil
+	}
+	doJS := containsStr(ran, "js")
+	doIOS := containsStr(ran, "ios")
+	if ctx.Force {
+		if doJS {
+			clean.Exec(false, ctx.ProjectRoot, "npm", "install")
+		}
+		if doIOS {
+			clean.Exec(false, filepath.Join(ctx.ProjectRoot, "ios"), "pod", "install", "--repo-update")
+		}
+		return nil
+	}
 	if ctx.Yes {
 		return nil
 	}
-	has := func(s string) bool {
-		for _, r := range ran {
-			if r == s {
-				return true
-			}
-		}
-		return false
-	}
-	if has("js") && promptYes("  Run 'npm install' now? [y/N] ") {
+	if doJS && promptYes("  Run 'npm install' now? [y/N] ") {
 		clean.Exec(false, ctx.ProjectRoot, "npm", "install")
 	}
-	if has("ios") && promptYes("  Run 'pod install' now? [y/N] ") {
+	if doIOS && promptYes("  Run 'pod install' now? [y/N] ") {
 		clean.Exec(false, filepath.Join(ctx.ProjectRoot, "ios"), "pod", "install", "--repo-update")
 	}
 	return nil
@@ -1286,6 +1306,15 @@ func promptYes(msg string) bool {
 	line, _ := r.ReadString('\n')
 	line = strings.TrimSpace(strings.ToLower(line))
 	return line == "y" || line == "yes"
+}
+
+func containsStr(sl []string, s string) bool {
+	for _, x := range sl {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 func init() { detect.Register(rn{}) }
@@ -1315,7 +1344,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `pkgJSONHas`, `rnJS`/`rnMetro`/`androidLocal`/`iosLocal`.
-- Produces: `type expo struct{}` implementing `detect.Detector`; adds `.expo/` cleanup on top of RN targets; registered via `init()`.
+- Produces: `type expo struct{ rn }` (embeds `rn` to inherit its `PostRun` reinstall) implementing `detect.Detector` + `detect.PostRunner`; adds `.expo/` cleanup on top of RN targets; registered via `init()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1369,7 +1398,9 @@ import (
 	"github.com/latif-essam/app-dev-clean/internal/detect"
 )
 
-type expo struct{}
+// expo embeds rn so it inherits rn's PostRun (npm/pod reinstall) behavior.
+// Name/Detect/Targets below shadow the embedded rn's methods.
+type expo struct{ rn }
 
 func (expo) Name() string { return "expo" }
 
@@ -1540,8 +1571,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Produces:
   - `type Options struct { Targets []string; TypeFilter string; DryRun, Yes, ShowRoot, Help, Version bool }`.
   - `func parse(args []string) (Options, error)`.
-  - `func Run(args []string, version string) int` (full behavior).
-  - `func isGlobalName(name string) bool`.
+  - `func Run(args []string, version string) int` (full behavior; sets `ctx.Force` when `nuclear` is requested, then always invokes matched `PostRunner`s).
+  - `func isGlobalName(name string) bool`, `func containsStr(sl []string, s string) bool`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1725,18 +1756,24 @@ func Run(args []string, version string) int {
 
 	targets := collectTargets(res, o.TypeFilter)
 
-	var selected []string
+	// Gather raw selections (menu rows OR CLI args, either may include combos).
+	var raw []string
 	if len(o.Targets) == 0 {
-		// interactive menu
 		rows := ui.Rows(targets, detect.Globals(), ctx)
-		selected = ui.Run(rows)
-		if len(selected) == 0 {
+		raw = ui.Run(rows)
+		if len(raw) == 0 {
 			fmt.Println("nothing selected")
 			return 0
 		}
 	} else {
-		selected = expandCombos(o.Targets, targets)
+		raw = o.Targets
 	}
+
+	// Detect nuclear BEFORE expansion (expandCombos replaces the token); nuclear
+	// forces unconditional reinstall. Then expand once for both paths.
+	nuclear := containsStr(raw, "nuclear")
+	ctx.Force = nuclear
+	selected := expandCombos(raw, targets)
 
 	if !o.Yes && needsConfirm(selected) {
 		fmt.Printf("About to clean shared/global caches: %s\n", strings.Join(selected, " "))
@@ -1845,16 +1882,13 @@ func needsConfirm(selected []string) bool {
 	return false
 }
 
-// runTargets executes each selected target, summing reclaimed bytes, then runs
-// any detector PostRun hooks (reinstall prompts). Unknown names warn + skip.
+// runTargets executes each selected target (already combo-expanded), summing
+// reclaimed bytes, then runs each matched detector's PostRun hook. PostRun
+// itself decides reinstall behavior from ctx (DryRun/Force/Yes). Unknown names
+// warn and are skipped.
 func runTargets(ctx detect.Context, res *detect.Result, selected []string, local []detect.Target) int64 {
 	var freed int64
-	nuclear := false
 	for _, name := range selected {
-		if name == "nuclear" {
-			nuclear = true
-			continue
-		}
 		tg, ok := targetByName(name, local)
 		if !ok {
 			fmt.Printf("  ! unknown target: %s\n", name)
@@ -1866,9 +1900,7 @@ func runTargets(ctx detect.Context, res *detect.Result, selected []string, local
 		}
 		freed += f
 	}
-	// PostRun (reinstall) for detectors that implement it, unless nuclear (which
-	// always reinstalls) — handled here by forcing reinstall via ctx.Yes=false.
-	if res != nil && !nuclear {
+	if res != nil {
 		for _, d := range res.Matched {
 			if pr, ok := d.(detect.PostRunner); ok {
 				_ = pr.PostRun(ctx, selected)
@@ -1883,6 +1915,15 @@ func promptYes(msg string) bool {
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	line = strings.TrimSpace(strings.ToLower(line))
 	return line == "y" || line == "yes"
+}
+
+func containsStr(sl []string, s string) bool {
+	for _, x := range sl {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 ```
 
@@ -2710,4 +2751,6 @@ Watch the release workflow: `gh run watch`. Expected: GitHub Release with all ar
 
 **3. Type consistency:** `detect.Context`, `detect.Target{Name,Label,Desc,Scope,Paths,Run}`, `Target.Run(ctx) (int64, error)`, `detect.Result{Root,Matched}`, `detect.Resolve`, `detect.Register/Detectors/RegisterGlobal/Globals`, `platform.Paths{...}`, `platform.Detect`, `clean.Size/Remove/Exec/Human`, `ui.Row/Rows/Run/newModel`, `cli.Options/parse/Run/isGlobalName`, detector helper funcs `androidLocalPaths/androidLocal/iosLocalPaths/iosLocal/rnJS/rnMetro/rnWatchman/pkgJSONHas` — all used with consistent names/signatures across tasks.
 
-**Known intentional deviation from spec:** expo/flutter compose android/ios *local* cleanups by reusing `androidLocal`/`iosLocal`; global-cache composition for those types happens by selecting the shared global targets in the menu / via `nuclear`, matching the spec's "shared helpers" intent.
+**Known intentional deviation from spec:** expo/flutter compose android/ios *local* cleanups by reusing `androidLocal`/`iosLocal`; global-cache composition for those types happens by selecting the shared global targets in the menu / via `nuclear`, matching the spec's "shared helpers" intent. `expo` embeds `rn` to inherit reinstall; `flutter` intentionally has no reinstall hook (no node_modules/Pods — `flutter clean`/`pub get` are the user's rebuild step).
+
+**Pre-flight plan fixes (2026-07-23, before execution):** (1) removed a no-op `os` import in the Task 1 test; (2) added `Context.Force` + made `rn.PostRun` honor DryRun/Force/Yes so `nuclear` reinstalls unconditionally (spec requires reinstall) while dry-run never does; (3) unified menu/CLI combo expansion in `cli.Run` and tracked `nuclear` before expansion; (4) made `clean.Exec` separator-aware and `androidLocal` pass an ABSOLUTE gradlew path (bare `./gradlew` does not resolve against `cmd.Dir` in `os/exec`); (5) `expo` embeds `rn` to inherit reinstall.
