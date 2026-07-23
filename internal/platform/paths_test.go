@@ -1,6 +1,9 @@
 package platform
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func envFrom(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
@@ -11,8 +14,9 @@ func TestDetectForDarwin(t *testing.T) {
 	if p.XcodeDD == "" || p.CocoaPods == "" {
 		t.Fatalf("darwin must have xcode+cocoapods paths, got %+v", p)
 	}
-	if p.GradleCache != "/Users/x/.gradle/caches" {
-		t.Fatalf("gradle path wrong: %q", p.GradleCache)
+	want := filepath.Join("/Users/x", ".gradle", "caches")
+	if p.GradleCache != want {
+		t.Fatalf("gradle path wrong: got %q, want %q", p.GradleCache, want)
 	}
 }
 
@@ -21,8 +25,9 @@ func TestDetectForLinux(t *testing.T) {
 	if p.XcodeDD != "" || p.CocoaPods != "" {
 		t.Fatalf("linux must NOT have xcode/cocoapods, got %+v", p)
 	}
-	if p.PubCache != "/home/x/.pub-cache" {
-		t.Fatalf("pub path wrong: %q", p.PubCache)
+	want := filepath.Join("/home/x", ".pub-cache")
+	if p.PubCache != want {
+		t.Fatalf("pub path wrong: got %q, want %q", p.PubCache, want)
 	}
 }
 
