@@ -1,90 +1,72 @@
-# devclean
+# app-dev-clean
 
-Global dev-cache cleaner for macOS. Run it from **anywhere inside a project** — it
-walks up from your current directory to find the real project root, then cleans that
-project's caches. If you're not inside a recognized project, it refuses local cleanup
-so it can never delete the wrong files.
+Cross-platform dev-cache cleaner for mobile & native projects. Run it from
+**anywhere inside a project** — it walks up to the real project root, detects the
+project type(s), and cleans the right caches. Refuses to touch anything if you're
+not inside a recognized project.
 
-Currently ships a **React Native** module (ported from the app's `scripts/clean.sh`).
-New app types are drop-in: add one file under `apps/`.
+Supports **React Native, Expo, Flutter, native Android (Gradle), and native
+iOS/macOS (Xcode/SwiftPM)** on **Windows, macOS, and Linux**.
 
-## Install (local Homebrew tap)
+## Install
 
+**Homebrew (macOS/Linux):**
 ```bash
-# one-time: create a local tap
-brew tap-new latif/tools
-
-# copy this formula into the tap
-cp Formula/devclean.rb "$(brew --repository latif/tools)/Formula/devclean.rb"
-
-# install from the local git repo's HEAD
-brew install --HEAD latif/tools/devclean
+brew install latif-essam/tap/app-dev-clean
 ```
 
-Update after editing the tool:
-
-```bash
-cd ~/dev-tools/devclean && git commit -am "..."
-brew reinstall --HEAD latif/tools/devclean
+**Scoop (Windows):**
+```powershell
+scoop bucket add latif-essam https://github.com/latif-essam/scoop-bucket
+scoop install app-dev-clean
 ```
+
+**Install script (macOS/Linux):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.sh | bash
+```
+
+**Install script (Windows PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.ps1 | iex
+```
+
+**Go:**
+```bash
+go install github.com/latif-essam/app-dev-clean@latest
+```
+
+Or grab a prebuilt binary from [Releases](https://github.com/latif-essam/app-dev-clean/releases).
+An `adc` alias is installed alongside the full name.
 
 ## Usage
 
 ```bash
-devclean                # interactive menu (inside a known project)
-devclean ios js         # run named targets, no prompt
-devclean local-all      # all LOCAL targets for the detected app type
-devclean nuclear        # local-all + global caches + reinstall (confirmed)
-devclean gradle-global  # a global cache target (allowed anywhere; confirmed)
-devclean --root         # print resolved project root + app type
-devclean --help
+app-dev-clean                interactive menu (inside a known project)
+app-dev-clean ios js         run named targets, no prompt
+app-dev-clean local-all      all local targets for the detected type(s)
+app-dev-clean nuclear        local-all + global caches + reinstall (confirmed)
+app-dev-clean --type flutter scope to one detector
+app-dev-clean --dry-run      show what would be freed; delete nothing
+app-dev-clean -y             skip confirmation prompts (CI)
+app-dev-clean --root         print resolved root + detected type(s)
+adc ios js                   same, via the short alias
 ```
 
-### React Native targets
+## Safety
 
-- **LOCAL** (project, fast to rebuild): `android` `ios` `js` `metro` `watchman`
-- **GLOBAL** (shared across all projects, slow): `gradle-global` `xcode-dd` `pods-cache`
-- **COMBOS**: `local-all` `nuclear`
+- Local targets only ever act on the resolved project root — never your cwd blindly.
+- Outside a recognized project, local cleanup is refused (non-zero exit).
+- Global caches (`~/.gradle`, Xcode DerivedData, CocoaPods, pub cache) always
+  prompt before deletion because they affect every project on the machine.
 
-Global targets always prompt for confirmation because they affect every project on the
-machine.
+## Adding a detector
 
-## Layout
+Create `internal/detectors/<type>.go` implementing `detect.Detector`
+(`Name`, `Detect(dir)`, `Targets()`) and call `detect.Register(...)` in `init()`.
+Detection, the menu, and CLI dispatch pick it up automatically. See existing
+detectors for the pattern.
 
-```
-bin/devclean      entrypoint: parse args -> resolve root -> dispatch
-lib/core.sh       output helpers, nuke(), global cache targets, registry, menu
-lib/detect.sh     walk-up project-root resolution
-apps/rn.sh        React Native module (markers + targets)
-Formula/devclean.rb   Homebrew formula
-tests/run.sh      dependency-free test harness
-```
+## License
 
-## Adding a new app type
-
-Create `apps/<type>.sh` defining four functions and registering them:
-
-```bash
-<type>_markers()   { # $1 = candidate dir; return 0 if it's a root of this type
-}
-<type>_menu_rows() { # echo "#Header" lines and "target|label|description" lines
-}
-<type>_run()       { # $1 = target name; do the cleanup
-}
-<type>_post()      { # optional: $@ = targets just run; post-run prompts (or omit)
-}
-register_app <type> <type>_markers <type>_menu_rows <type>_run <type>_post
-```
-
-That's it — detection, the menu, and CLI dispatch pick it up automatically. Global cache
-targets (`gradle-global`, `xcode-dd`, `pods-cache`) live in `lib/core.sh` and are shared
-across all app types.
-
-## Testing
-
-```bash
-bash tests/run.sh
-```
-
-Covers the registry, `nuke`, RN markers, and up-tree root resolution (including the
-refuse-when-not-a-project case).
+MIT © Latif Essam
