@@ -4,9 +4,9 @@ import "testing"
 
 type fake struct{ name string }
 
-func (f fake) Name() string          { return f.name }
-func (f fake) Detect(string) bool    { return true }
-func (f fake) Targets() []Target     { return nil }
+func (f fake) Name() string       { return f.name }
+func (f fake) Detect(string) bool { return true }
+func (f fake) Targets() []Target  { return nil }
 
 func TestRegistry(t *testing.T) {
 	registry = nil

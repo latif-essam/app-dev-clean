@@ -40,10 +40,10 @@ type PostRunner interface {
 
 var registry []Detector
 
-func Register(d Detector)      { registry = append(registry, d) }
-func Detectors() []Detector    { return registry }
+func Register(d Detector)   { registry = append(registry, d) }
+func Detectors() []Detector { return registry }
 
 var globals []Target
 
-func RegisterGlobal(t Target)  { globals = append(globals, t) }
-func Globals() []Target        { return globals }
+func RegisterGlobal(t Target) { globals = append(globals, t) }
+func Globals() []Target       { return globals }
