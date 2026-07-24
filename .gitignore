@@ -1,1 +1,4 @@
 tests/fixtures/
+/dist/
+/app-dev-clean
+/adc
