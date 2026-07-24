@@ -20,11 +20,16 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ["zip"]
 
 checksum:
   name_template: "checksums.txt"
 
+# NOTE: goreleaser deprecates `brews` in favor of `homebrew_casks`, but we
+# deliberately keep the Homebrew FORMULA here: our binary is unsigned, and
+# Homebrew casks quarantine unsigned binaries (Gatekeeper) requiring xattr
+# workarounds, whereas formulae install cleanly. Formulae also support the
+# `adc` symlink alias directly. Revisit if the binary ever gets code-signed.
 brews:
   - repository:
       owner: latif-essam
