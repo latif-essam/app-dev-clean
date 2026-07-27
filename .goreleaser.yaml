@@ -1,0 +1,64 @@
+version: 2
+project_name: app-dev-clean
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: app-dev-clean
+    main: .
+    binary: app-dev-clean
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: ["zip"]
+
+checksum:
+  name_template: "checksums.txt"
+
+# NOTE: goreleaser deprecates `brews` in favor of `homebrew_casks`, but we
+# deliberately keep the Homebrew FORMULA here: our binary is unsigned, and
+# Homebrew casks quarantine unsigned binaries (Gatekeeper) requiring xattr
+# workarounds, whereas formulae install cleanly. Formulae also support the
+# `adc` symlink alias directly. Revisit if the binary ever gets code-signed.
+brews:
+  - repository:
+      owner: latif-essam
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/latif-essam/app-dev-clean"
+    description: "Cross-platform dev-cache cleaner (RN/Expo/Flutter/native)"
+    license: "MIT"
+    install: |
+      bin.install "app-dev-clean"
+      bin.install_symlink "app-dev-clean" => "adc"
+
+scoops:
+  - repository:
+      owner: latif-essam
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/latif-essam/app-dev-clean"
+    description: "Cross-platform dev-cache cleaner (RN/Expo/Flutter/native)"
+    license: "MIT"
+    # Scoop manifests have no alias/shim field (goreleaser emits a flat `bin`),
+    # so the short `adc` alias is added as a best-effort cmd shim in scoop's
+    # shims dir. Deliberately non-fatal: if anything here fails the alias is
+    # simply absent and `scoop install` still succeeds.
+    post_install:
+      - '$shims = if ($env:SCOOP) { "$env:SCOOP\shims" } else { "$env:USERPROFILE\scoop\shims" }'
+      - 'if (Test-Path $shims) { Set-Content -Path "$shims\adc.cmd" -Value "@`"$dir\app-dev-clean.exe`" %*" -Encoding ASCII -ErrorAction SilentlyContinue }'
+
+release:
+  github:
+    owner: latif-essam
+    name: app-dev-clean
