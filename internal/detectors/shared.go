@@ -2,6 +2,7 @@ package detectors
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/latif-essam/app-dev-clean/internal/clean"
@@ -14,6 +15,25 @@ func exists(path string) bool {
 }
 
 func isWindows() bool { return runtime.GOOS == "windows" }
+
+// Base dirs for the native cleanups. The android/ios path builders are relative
+// to the dir that actually holds the gradle project / Xcode project, which is
+// NOT always the detected project root:
+//
+//	native Android or Xcode repo -> the root IS that dir      -> projectRoot
+//	React Native / bare Expo     -> it is <root>/android, <root>/ios
+//
+// Passing projectRoot for RN made every native target resolve to a
+// non-existent path and silently clean nothing.
+func projectRoot(ctx detect.Context) string { return ctx.ProjectRoot }
+
+func androidSubdir(ctx detect.Context) string {
+	return filepath.Join(ctx.ProjectRoot, "android")
+}
+
+func iosSubdir(ctx detect.Context) string {
+	return filepath.Join(ctx.ProjectRoot, "ios")
+}
 
 // globalTarget builds a Global-scope target cleaning a single machine-wide
 // cache path chosen by pick. If pick returns "", the target offers no path

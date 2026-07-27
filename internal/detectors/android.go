@@ -30,29 +30,45 @@ func androidLocalPaths(root string) []string {
 	}
 }
 
-func androidLocal(ctx detect.Context) (int64, error) {
-	wrapperName := "gradlew"
+func gradlewName() string {
 	if isWindows() {
-		wrapperName = "gradlew.bat"
+		return "gradlew.bat"
 	}
-	wrapperPath := filepath.Join(ctx.ProjectRoot, wrapperName)
-	if exists(wrapperPath) {
-		// Pass the ABSOLUTE wrapper path: bare "./gradlew" does not resolve
-		// relative to cmd.Dir in os/exec (see clean.Exec).
-		clean.Exec(ctx.DryRun, ctx.ProjectRoot, wrapperPath, "clean")
+	return "gradlew"
+}
+
+// androidLocalIn cleans the gradle project rooted at base(ctx) — the root for a
+// native repo, <root>/android for RN/Expo. See the base helpers in shared.go.
+func androidLocalIn(base func(detect.Context) string) func(detect.Context) (int64, error) {
+	return func(ctx detect.Context) (int64, error) {
+		dir := base(ctx)
+		wrapperPath := filepath.Join(dir, gradlewName())
+		if exists(wrapperPath) {
+			// Pass the ABSOLUTE wrapper path: bare "./gradlew" does not resolve
+			// relative to cmd.Dir in os/exec (see clean.Exec).
+			clean.Exec(ctx.DryRun, dir, wrapperPath, "clean")
+		}
+		return clean.Remove(ctx.DryRun, androidLocalPaths(dir)...), nil
 	}
-	return clean.Remove(ctx.DryRun, androidLocalPaths(ctx.ProjectRoot)...), nil
+}
+
+// androidTarget builds the android cleanup target for a given base dir, so the
+// native and RN/Expo detectors share one definition.
+func androidTarget(base func(detect.Context) string, desc string) detect.Target {
+	return detect.Target{
+		Name:  "android",
+		Label: "android",
+		Desc:  desc,
+		Scope: detect.Local,
+		Paths: func(ctx detect.Context) []string { return androidLocalPaths(base(ctx)) },
+		Run:   androidLocalIn(base),
+	}
 }
 
 func (android) Targets() []detect.Target {
-	return []detect.Target{{
-		Name:  "android",
-		Label: "android",
-		Desc:  "build/, app/build, .gradle, .cxx + gradlew clean",
-		Scope: detect.Local,
-		Paths: func(ctx detect.Context) []string { return androidLocalPaths(ctx.ProjectRoot) },
-		Run:   androidLocal,
-	}}
+	return []detect.Target{
+		androidTarget(projectRoot, "build/, app/build, .gradle, .cxx + gradlew clean"),
+	}
 }
 
 func init() { detect.Register(android{}) }

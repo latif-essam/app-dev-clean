@@ -33,12 +33,12 @@ func (expo) Targets() []detect.Target {
 		{Name: "metro", Label: "metro", Desc: "Metro/Haste temp caches", Scope: detect.Local,
 			Paths: func(c detect.Context) []string { return nil }, Run: rnMetro},
 	}
-	// Bare Expo also has native dirs -> include android/ios local cleanups.
+	// Bare Expo also has native dirs (post-prebuild) -> include android/ios
+	// local cleanups, rooted at those subdirs exactly as for RN. In a managed
+	// project the dirs are absent and clean.Remove skips them.
 	t = append(t,
-		detect.Target{Name: "android", Label: "android", Desc: "android build + gradle caches", Scope: detect.Local,
-			Paths: func(c detect.Context) []string { return androidLocalPaths(c.ProjectRoot) }, Run: androidLocal},
-		detect.Target{Name: "ios", Label: "ios", Desc: "ios build, Pods, Podfile.lock", Scope: detect.Local,
-			Paths: func(c detect.Context) []string { return iosLocalPaths(c.ProjectRoot) }, Run: iosLocal},
+		androidTarget(androidSubdir, "android/ build, app/build, .gradle, .cxx + gradlew clean"),
+		iosTarget(iosSubdir, "ios/ build, Pods, Podfile.lock"),
 	)
 	return t
 }
