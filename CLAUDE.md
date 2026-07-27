@@ -3,33 +3,47 @@
 Cross-platform dev-cache cleaner CLI (Go). Walks up from cwd to the real project
 root, detects project type(s), cleans the right caches. Windows/macOS/Linux.
 
-## Current status (2026-07-24)
+## Current status (2026-07-27)
 
-- **All code complete + validated on branch `go-rewrite`** (25 commits). Tests,
-  vet, gofmt clean; cross-compiles to all 6 targets; goreleaser snapshot builds
-  the full release (archives + brew formula + scoop manifest).
-- **Not pushed to any remote. No GitHub repo exists yet. Not merged to `main`.**
-- **Next step = publish.** Follow `PUBLISHING.md` (repos to create, the PAT the
-  user must mint, ordered steps). User deferred this pending their code review.
+- **Go rewrite is merged to `main`** via PR #1 (`c1f7ad7`, 30 commits). CI runs on
+  ubuntu + macos + windows and is green. The legacy bash tree is deleted.
+- **Repo is public: `github.com/latif-essam/app-dev-clean`.** Tap and bucket repos
+  exist and are empty: `latif-essam/homebrew-tap`, `latif-essam/scoop-bucket`.
+  goreleaser commits into them on each tag.
+- **Not yet released — no tag exists.** Blocked on the `HOMEBREW_TAP_GITHUB_TOKEN`
+  Actions secret, which only the user can mint (fine-grained PAT, Contents:RW on
+  the tap + bucket repos). Without it the brews/scoops stages fail at tag time.
+- **Next step = tag `v0.1.0`** once that secret exists; the tag push triggers
+  `.github/workflows/release.yml`. See `PUBLISHING.md` for the full runbook.
 - Design spec + task plan: `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 
-## Repo is mid-migration — do not touch the legacy bash tree
-
-`bin/ lib/ apps/ Formula/ tests/` and `docs/plans/2026-07-14-devclean.md` are the
-**old bash implementation**, still present so the installed `dev-app-clean`
-symlink keeps working until the Go version ships. They get deleted when
-`go-rewrite` merges to `main`. Never edit or "fix" them.
-
 Local dir is `devclean` but the module/binary is `app-dev-clean` — intentional.
+
+## Own tap ≠ "in Homebrew"
+
+`brew install latif-essam/tap/app-dev-clean` works off our own tap, but is **not
+discoverable**: `brew search` only covers homebrew-core plus taps already added
+locally. Plain `brew install app-dev-clean` and a formulae.brew.sh listing require
+a PR to `Homebrew/homebrew-core`, and a core formula **builds from source** — it
+would be hand-written, not the goreleaser-generated binary formula. Same split on
+Scoop: our bucket vs. Scoop's main bucket. Don't conflate the two when discussing
+release scope.
 
 ## Commands
 
 - `go test ./...` — full suite (includes `e2e_test.go`, which builds + runs the real binary)
-- `gofmt -w main.go e2e_test.go internal/` — **run before every commit**; `gofmt -l` must be empty
+- `gofmt -w main.go main_test.go e2e_test.go internal/` — **run before every commit**; `gofmt -l` must be empty
 - `go vet ./...`
 - `for c in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do GOOS=${c%/*} GOARCH=${c#*/} go build -o /dev/null . || echo "FAIL $c"; done` — cross-compile check
 - `HOMEBREW_TAP_GITHUB_TOKEN=dummy goreleaser release --snapshot --clean` — full release dry-run into `dist/` (gitignored)
 - `goreleaser check` — config lint; **the `brews` deprecation warning is expected, see below**
+
+**Manual behaviour check** (catches what unit tests miss — the dry-run output *is*
+the resolved path list): build synthetic projects (rn/bare-expo/managed-expo/
+flutter/native-android/native-ios/empty), run `app-dev-clean local-all --dry-run -y`
+in each, and diff a `find`-based file listing before/after — it must be identical.
+Swap `gradlew` for a script that appends to a sentinel file to prove `--dry-run`
+never executes it.
 
 ## Architecture
 
@@ -54,6 +68,20 @@ Detectors return a **set** — a repo can match several types (bare Expo is both
 - **Never pass a bare relative path to `clean.Exec`** (e.g. `./gradlew`). It does
   not resolve against `cmd.Dir` in `os/exec`. Pass an absolute path; `Exec` is
   separator-aware and stats explicit paths directly.
+- **Native path builders take a BASE dir, not the project root.**
+  `androidLocalPaths`/`iosLocalPaths` are relative to whatever holds the gradle /
+  Xcode project, which is *not* always the detected root: native repo → the root
+  itself (`projectRoot`), RN/bare Expo → `<root>/android`, `<root>/ios`
+  (`androidSubdir`/`iosSubdir` in `shared.go`). Passing the root for RN made every
+  native target probe a nonexistent path and report `0 B` while
+  `android/app/build` was full, and `gradlew clean` never ran. Build targets via
+  the `androidTarget`/`iosTarget` factories so the two geometries can't drift.
+- **Test `Targets()` paths, not just `Detect()`.** The bug above survived a green
+  suite because rn/expo tests only asserted detection. Assert the resolved path
+  set — with negative cases, so an RN prefix can't leak into a native repo.
+- **Windows can't exec an extension-less file.** Tests that `go build -o <tmp>/adc`
+  then run it must append `.exe` on `GOOS=windows` — see `exeName` in
+  `e2e_test.go`. Passes locally on macOS, fails only on the Windows runner.
 - **`filepath.Join` uses the HOST separator**, not the `goos` you're simulating.
   In per-OS tests build expected values with `filepath.Join` too — hardcoded
   `/`-literals fail on the Windows CI runner.
@@ -69,8 +97,9 @@ Detectors return a **set** — a repo can match several types (bare Expo is both
 
 ## Conventions
 
-- Conventional Commits, ending with:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- Conventional Commits, ending with a `Co-Authored-By:` trailer naming the model
+  that actually wrote the commit (e.g. `Claude Opus 5 (1M context)
+  <noreply@anthropic.com>`) — don't copy a stale model name forward.
 - TDD: failing test → minimal implementation → green → commit.
 - Deletion always goes through `clean.Remove` so dry-run + size accounting stay
   uniform; absent paths and per-path errors are logged and skipped, never fatal.

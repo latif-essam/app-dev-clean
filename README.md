@@ -16,6 +16,8 @@ iOS/macOS (Xcode/SwiftPM)** on **Windows, macOS, and Linux**.
 brew install latif-essam/tap/app-dev-clean
 ```
 
+No separate `brew tap` needed — the `owner/tap/formula` form taps automatically.
+
 **Scoop (Windows):**
 
 ```powershell
@@ -57,6 +59,30 @@ app-dev-clean -y             skip confirmation prompts (CI)
 app-dev-clean --root         print resolved root + detected type(s)
 adc ios js                   same, via the short alias
 ```
+
+## What it cleans
+
+Local targets, by detected project type. A project can match several types at
+once (a bare Expo app is both `expo` and `rn`); you get the deduped union.
+
+| Type | Target | Paths |
+|---|---|---|
+| `rn`, `expo` | `js` | `node_modules`, `package-lock.json` |
+| `rn`, `expo` | `metro` | `metro-*`, `haste-map-*`, `metro-cache` in the OS temp dir |
+| `rn`, `expo` | `android` | `android/build`, `android/app/build`, `android/.gradle`, `android/.cxx`, `android/app/.cxx` + `android/gradlew clean` |
+| `rn`, `expo` | `ios` | `ios/build`, `ios/Pods`, `ios/Podfile.lock` |
+| `rn` | `watchman` | resets a stale watch (no deletion) |
+| `expo` | `expo` | `.expo`, `.expo-shared` |
+| `flutter` | `flutter` | `build/`, `.dart_tool/` + `flutter clean` |
+| `android` | `android` | `build/`, `app/build`, `.gradle`, `.cxx` + `gradlew clean` |
+| `ios` | `ios` | `build/`, `Pods`, `Podfile.lock`, SwiftPM `.build` |
+
+Native paths are resolved relative to the dir that actually holds the build — the
+project root for a native Gradle/Xcode repo, `android/` and `ios/` for RN and Expo.
+
+Global targets (machine-wide, always confirmed): `gradle-global`
+(`~/.gradle/caches`), `xcode-dd` (Xcode DerivedData, macOS), `pods-cache`
+(CocoaPods, macOS), `pub-cache` (Flutter pub cache).
 
 ## Safety
 
