@@ -1,4 +1,4 @@
-# app-dev-clean
+# app-dev-clean ~ adc
 
 Cross-platform dev-cache cleaner for mobile & native projects. Run it from
 **anywhere inside a project** — it walks up to the real project root, detects the
@@ -11,27 +11,32 @@ iOS/macOS (Xcode/SwiftPM)** on **Windows, macOS, and Linux**.
 ## Install
 
 **Homebrew (macOS/Linux):**
+
 ```bash
 brew install latif-essam/tap/app-dev-clean
 ```
 
 **Scoop (Windows):**
+
 ```powershell
 scoop bucket add latif-essam https://github.com/latif-essam/scoop-bucket
 scoop install app-dev-clean
 ```
 
 **Install script (macOS/Linux):**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.sh | bash
 ```
 
 **Install script (Windows PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/latif-essam/app-dev-clean/main/install.ps1 | iex
 ```
 
 **Go:**
+
 ```bash
 go install github.com/latif-essam/app-dev-clean@latest
 ```
