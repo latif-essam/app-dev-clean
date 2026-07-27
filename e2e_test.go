@@ -4,13 +4,22 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
+// Windows cannot exec an extension-less file, so the test binary needs .exe there.
+func exeName(base string) string {
+	if runtime.GOOS == "windows" {
+		return base + ".exe"
+	}
+	return base
+}
+
 func buildBin(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "adc")
+	bin := filepath.Join(t.TempDir(), exeName("adc"))
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
