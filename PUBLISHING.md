@@ -61,10 +61,16 @@ The workflow (`.github/workflows/release.yml`) already reads this secret name.
    The tag push triggers `release.yml` → goreleaser: builds all 6 binaries,
    creates the GitHub Release with archives + checksums, commits the formula to
    `homebrew-tap`, the manifest to `scoop-bucket`.
-5. **Verify** — install on each OS:
-   - mac/Linux: `brew install latif-essam/tap/app-dev-clean && app-dev-clean --version`
-   - Windows: `scoop bucket add latif-essam https://github.com/latif-essam/scoop-bucket; scoop install app-dev-clean`
+5. **Verify** — install on each OS, and check the `adc` alias resolves too:
+   - mac/Linux: `brew install latif-essam/tap/app-dev-clean && app-dev-clean --version && adc --version`
+   - Windows: `scoop bucket add latif-essam https://github.com/latif-essam/scoop-bucket; scoop install app-dev-clean; app-dev-clean --version`
    - anywhere: `go install github.com/latif-essam/app-dev-clean@latest`
+
+   **Untested until a real Windows run:** the `adc` shim on Scoop is created by a
+   `post_install` block (Scoop manifests have no alias field). It's written to be
+   non-fatal — if it fails the alias is just missing and the install still
+   succeeds. Confirm `adc --version` on Windows; if absent, `scoop alias` or the
+   `install.ps1` path (which writes `adc.cmd` directly) are the fallbacks.
 
 ## Minimal vs full publish
 

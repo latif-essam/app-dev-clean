@@ -50,6 +50,13 @@ scoops:
     homepage: "https://github.com/latif-essam/app-dev-clean"
     description: "Cross-platform dev-cache cleaner (RN/Expo/Flutter/native)"
     license: "MIT"
+    # Scoop manifests have no alias/shim field (goreleaser emits a flat `bin`),
+    # so the short `adc` alias is added as a best-effort cmd shim in scoop's
+    # shims dir. Deliberately non-fatal: if anything here fails the alias is
+    # simply absent and `scoop install` still succeeds.
+    post_install:
+      - '$shims = if ($env:SCOOP) { "$env:SCOOP\shims" } else { "$env:USERPROFILE\scoop\shims" }'
+      - 'if (Test-Path $shims) { Set-Content -Path "$shims\adc.cmd" -Value "@`"$dir\app-dev-clean.exe`" %*" -Encoding ASCII -ErrorAction SilentlyContinue }'
 
 release:
   github:
