@@ -61,10 +61,9 @@ func rnWatchman(ctx detect.Context) (int64, error) {
 
 func (rn) Targets() []detect.Target {
 	return []detect.Target{
-		{Name: "android", Label: "android", Desc: "android build + gradle caches", Scope: detect.Local,
-			Paths: func(c detect.Context) []string { return androidLocalPaths(c.ProjectRoot) }, Run: androidLocal},
-		{Name: "ios", Label: "ios", Desc: "ios build, Pods, Podfile.lock", Scope: detect.Local,
-			Paths: func(c detect.Context) []string { return iosLocalPaths(c.ProjectRoot) }, Run: iosLocal},
+		// Native output lives under android/ and ios/, not at the project root.
+		androidTarget(androidSubdir, "android/ build, app/build, .gradle, .cxx + gradlew clean"),
+		iosTarget(iosSubdir, "ios/ build, Pods, Podfile.lock"),
 		{Name: "js", Label: "js", Desc: "node_modules + package-lock.json", Scope: detect.Local,
 			Paths: func(c detect.Context) []string {
 				return []string{filepath.Join(c.ProjectRoot, "node_modules"), filepath.Join(c.ProjectRoot, "package-lock.json")}

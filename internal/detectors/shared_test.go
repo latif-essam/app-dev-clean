@@ -7,6 +7,39 @@ import (
 	"github.com/latif-essam/app-dev-clean/internal/platform"
 )
 
+// targetByName finds a local target in a detector's Targets() slice.
+func targetByName(t *testing.T, targets []detect.Target, name string) detect.Target {
+	t.Helper()
+	for _, tg := range targets {
+		if tg.Name == name {
+			return tg
+		}
+	}
+	t.Fatalf("target %q not offered; got %+v", name, targets)
+	return detect.Target{}
+}
+
+// assertPaths checks that tg offers every path in want and none in unwanted.
+// Build expected values with filepath.Join — the host separator differs on the
+// Windows runner.
+func assertPaths(t *testing.T, tg detect.Target, ctx detect.Context, want, unwanted []string) {
+	t.Helper()
+	got := map[string]bool{}
+	for _, p := range tg.Paths(ctx) {
+		got[p] = true
+	}
+	for _, w := range want {
+		if !got[w] {
+			t.Errorf("%s: missing path %q; got %v", tg.Name, w, tg.Paths(ctx))
+		}
+	}
+	for _, u := range unwanted {
+		if got[u] {
+			t.Errorf("%s: must not offer root-level path %q", tg.Name, u)
+		}
+	}
+}
+
 func globalByName(t *testing.T, name string) detect.Target {
 	t.Helper()
 	for _, g := range detect.Globals() {

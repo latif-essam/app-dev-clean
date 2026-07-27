@@ -32,19 +32,25 @@ func iosLocalPaths(root string) []string {
 	}
 }
 
-func iosLocal(ctx detect.Context) (int64, error) {
-	return clean.Remove(ctx.DryRun, iosLocalPaths(ctx.ProjectRoot)...), nil
+// iosTarget builds the ios cleanup target for a given base dir — the root for a
+// native Xcode/SwiftPM repo, <root>/ios for RN/Expo. See shared.go.
+func iosTarget(base func(detect.Context) string, desc string) detect.Target {
+	return detect.Target{
+		Name:  "ios",
+		Label: "ios",
+		Desc:  desc,
+		Scope: detect.Local,
+		Paths: func(ctx detect.Context) []string { return iosLocalPaths(base(ctx)) },
+		Run: func(ctx detect.Context) (int64, error) {
+			return clean.Remove(ctx.DryRun, iosLocalPaths(base(ctx))...), nil
+		},
+	}
 }
 
 func (ios) Targets() []detect.Target {
-	return []detect.Target{{
-		Name:  "ios",
-		Label: "ios",
-		Desc:  "build/, Pods, Podfile.lock, SwiftPM .build",
-		Scope: detect.Local,
-		Paths: func(ctx detect.Context) []string { return iosLocalPaths(ctx.ProjectRoot) },
-		Run:   iosLocal,
-	}}
+	return []detect.Target{
+		iosTarget(projectRoot, "build/, Pods, Podfile.lock, SwiftPM .build"),
+	}
 }
 
 func init() { detect.Register(ios{}) }
