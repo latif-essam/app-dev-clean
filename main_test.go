@@ -2,13 +2,14 @@ package main
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 // build the binary once, run --version, assert it prints the injected version.
 func TestVersionFlag(t *testing.T) {
-	bin := t.TempDir() + "/adc"
+	bin := filepath.Join(t.TempDir(), exeName("adc"))
 	build := exec.Command("go", "build", "-ldflags", "-X main.version=9.9.9", "-o", bin, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
