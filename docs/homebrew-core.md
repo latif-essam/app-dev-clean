@@ -50,15 +50,15 @@ formula to "match" the tap — that's the likeliest reason for a rejection.
 ## The formula
 
 Goes to `Formula/a/app-dev-clean.rb` in a fork of `Homebrew/homebrew-core`.
-**`sha256` is a placeholder** until the tag exists — fill it with the command in
-the checklist below.
+The `sha256` below is the real checksum of the `v0.1.0` source tarball, verified
+2026-07-29. Re-derive it for any later version with the command in step 1.
 
 ```ruby
 class AppDevClean < Formula
   desc "Dev-cache cleaner for React Native, Expo, Flutter, Android, and iOS projects"
   homepage "https://github.com/latif-essam/app-dev-clean"
   url "https://github.com/latif-essam/app-dev-clean/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "PLACEHOLDER_FILL_AFTER_TAG"
+  sha256 "d50a6103b61aff56d05f21cf65ca189afff0c521715e62058d94f324fecab984"
   license "MIT"
   head "https://github.com/latif-essam/app-dev-clean.git", branch: "main"
 
@@ -96,11 +96,11 @@ Notes on the choices:
 
 Do these in order, after `v0.1.0` is tagged and the release exists.
 
-1. Get the tarball checksum:
+1. Confirm the tarball checksum (already filled in for v0.1.0 — redo per version):
    ```bash
-   curl -Ls https://github.com/latif-essam/app-dev-clean/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256
+   curl -fsSL https://github.com/latif-essam/app-dev-clean/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256
+   # expect d50a6103b61aff56d05f21cf65ca189afff0c521715e62058d94f324fecab984
    ```
-   Paste it over `PLACEHOLDER_FILL_AFTER_TAG`.
 
 2. Fork and branch:
    ```bash
