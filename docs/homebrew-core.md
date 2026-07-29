@@ -18,12 +18,53 @@ indexes). It is separate from, and does not replace, our own tap.
 Because core builds from source, its formula is **not** the one goreleaser
 generates. It's the file below.
 
-## Eligibility — checked against docs.brew.sh/Acceptable-Formulae (2026-07-27)
+## BLOCKER: the notability gate (measured 2026-07-29)
 
-The current document contains **no popularity threshold** — the words "notable",
-"popular", "stars", "forks" and "watchers" do not appear in it. The old
-30-forks / 30-watchers / 75-stars rule is gone from that page. The hard rules
-that do apply:
+**`brew audit --new` fails for this repo, and that is a hard stop:**
+
+```
+Error: 1 problem in 1 formula detected.
+app-dev-clean
+  * GitHub repository not notable enough (<30 forks, <30 watchers and <75 stars)
+```
+
+Current: **0 stars, 0 forks, 0 watchers.** The gate needs **75 stars OR 30 forks
+OR 30 watchers**. Until one of those is met, a core PR cannot pass CI — this is
+mechanical, not a matter of reviewer taste.
+
+**Don't trust the docs on this — trust the audit.** The rule is *not* in
+`docs.brew.sh/Acceptable-Formulae`; searching that page (and homebrew-core's
+`CONTRIBUTING.md`) for "notable", "popular", "stars", "forks" and "watchers"
+returns nothing. An earlier version of this document therefore claimed there was
+no popularity requirement. That was wrong: the check is implemented in
+`brew audit --new`, not written in the prose.
+
+It's also easy to miss because of *where* it fires:
+
+| Where audited | Command | Result |
+|---|---|---|
+| scratch tap (`local/coretest`) | `brew audit --new` | exit 0 — check skipped for third-party taps |
+| homebrew-core checkout | `brew audit --strict` | exit 0 — notability is `--new`-only |
+| homebrew-core checkout | `brew audit --new` | **exit 1 — not notable enough** |
+
+So a green audit in your own tap proves nothing about core eligibility. Only
+`--new` inside a homebrew-core checkout gives the real answer.
+
+### What this means
+
+Tier 2 is deferred until the repo gains traction — the formula is otherwise
+ready, so it becomes a ~10-minute job once the threshold is met. Watch it with:
+
+```
+gh api repos/latif-essam/app-dev-clean --jq '"stars=\(.stargazers_count) forks=\(.forks_count) watchers=\(.subscribers_count)"'
+```
+
+Meanwhile the own tap works on every machine with no setup, which is the whole
+of Tier 1 and needs nothing from Homebrew.
+
+## Other eligibility rules — checked against docs.brew.sh/Acceptable-Formulae
+
+These are all satisfied; notability above is the only failure.
 
 | Rule | Status |
 |---|---|
@@ -33,8 +74,9 @@ that do apply:
 | Open source, licence compatible with the DFSG | ✅ MIT |
 | Not self-updating | ✅ |
 | Not a native macOS `.app` (that would be a cask) | ✅ |
+| **Repo notable enough (75 stars / 30 forks / 30 watchers)** | ❌ **0 / 0 / 0 — see blocker above** |
 
-Maintainer discretion still applies — nothing here guarantees acceptance.
+Maintainer discretion still applies on top of all of this.
 
 ## Known review risk: the `adc` alias
 
@@ -103,10 +145,20 @@ and put through the full gate. All three passed:
 
 | Command | Result |
 |---|---|
-| `brew audit --new local/coretest/app-dev-clean` | exit 0, **zero output** |
+| `brew audit --new local/coretest/app-dev-clean` | exit 0, zero output — **but see the notability blocker; this check is skipped outside core** |
 | `brew style local/coretest/app-dev-clean` | exit 0, "1 file inspected, no offenses detected" |
 | `brew install --build-from-source local/coretest/app-dev-clean` | built in 1s, `--version` → `0.1.0` |
 | `brew test local/coretest/app-dev-clean` | exit 0, both assertions ran |
+
+Re-run inside the homebrew-core checkout, everything passed except notability:
+
+| Command | Result |
+|---|---|
+| `HOMEBREW_NO_INSTALL_FROM_API=1 brew install --build-from-source app-dev-clean` | exit 0, built in 1s |
+| `brew test app-dev-clean` | exit 0 |
+| `brew style app-dev-clean` | exit 0, no offenses |
+| `brew audit --strict app-dev-clean` | exit 0 |
+| `brew audit --new app-dev-clean` | **exit 1 — not notable enough** |
 
 Also confirmed: the source build installs **only** `bin/app-dev-clean`, no `adc`
 symlink — the deliberate omission described above is actually in effect.
