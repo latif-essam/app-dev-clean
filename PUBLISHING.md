@@ -2,7 +2,7 @@
 
 ## Where things stand (2026-07-29)
 
-Setup is complete. The only thing left for the first release is pushing a tag.
+**v0.1.0 is released.** `brew install latif-essam/tap/app-dev-clean` works.
 
 | Step | Status |
 |---|---|
@@ -12,9 +12,25 @@ Setup is complete. The only thing left for the first release is pushing a tag.
 | CI green on ubuntu + macOS + Windows | ✅ |
 | `HOMEBREW_TAP_GITHUB_TOKEN` Actions secret set | ✅ 2026-07-29 |
 | Repo descriptions + topics (incl. `scoop-bucket` topic) | ✅ |
-| **Tag `v0.1.0` → triggers the release** | ⬜ **next** |
-| Verify installs on mac / Windows / `go install` | ⬜ |
-| homebrew-core submission (Tier 2) | ⬜ see `docs/homebrew-core.md` |
+| Tag `v0.1.0` pushed → release workflow succeeded | ✅ run 30489056200 |
+| GitHub Release: 6 archives + `checksums.txt` | ✅ |
+| Formula committed to `homebrew-tap` | ✅ |
+| Manifest committed to `scoop-bucket` | ✅ |
+| Verified `brew install` + `adc` alias on macOS arm64 | ✅ reports `0.1.0` |
+| Verified `go install …@v0.1.0` | ✅ reports `0.1.0` |
+| Verify Scoop install + `adc` shim on real Windows | ⬜ **unverified** |
+| homebrew-core submission (Tier 2) | ⬜ see `docs/homebrew-core.md` (formula ready, sha256 filled) |
+| winget packaging | ⬜ deferred |
+
+Two things observed during the first release that aren't in the automated checks:
+
+- **`go install …@latest` lags the tag.** `proxy.golang.org` caches the module's
+  version list, so immediately after tagging, `@latest` still resolves to the
+  previous pseudo-version while `@v0.1.0` works. It corrects itself once the
+  proxy indexes the tag. Don't chase this as a bug.
+- **Homebrew now asks users to trust third-party taps.** Installing from our tap
+  surfaces `brew trust` guidance (see docs.brew.sh/Tap-Trust). It's a real
+  friction point for Tier 1 that homebrew-core wouldn't have.
 
 ## Cost and accounts
 

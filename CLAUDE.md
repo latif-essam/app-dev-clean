@@ -7,14 +7,17 @@ root, detects project type(s), cleans the right caches. Windows/macOS/Linux.
 
 - **Go rewrite is merged to `main`** via PR #1 (`c1f7ad7`, 30 commits). CI runs on
   ubuntu + macos + windows and is green. The legacy bash tree is deleted.
-- **Repo is public: `github.com/latif-essam/app-dev-clean`.** Tap and bucket repos
-  exist and are empty: `latif-essam/homebrew-tap`, `latif-essam/scoop-bucket`.
-  goreleaser commits into them on each tag.
-- **Not yet released — no tag exists.** Blocked on the `HOMEBREW_TAP_GITHUB_TOKEN`
-  Actions secret, which only the user can mint (fine-grained PAT, Contents:RW on
-  the tap + bucket repos). Without it the brews/scoops stages fail at tag time.
-- **Next step = tag `v0.1.0`** once that secret exists; the tag push triggers
-  `.github/workflows/release.yml`. See `PUBLISHING.md` for the full runbook.
+- **Repo is public: `github.com/latif-essam/app-dev-clean`.**
+- **`v0.1.0` is released.** Tag push ran `release.yml` → goreleaser green: 6
+  archives + checksums on the GitHub Release, formula committed to
+  `latif-essam/homebrew-tap`, manifest to `latif-essam/scoop-bucket`.
+  `HOMEBREW_TAP_GITHUB_TOKEN` is set (expires — re-mint per `PUBLISHING.md`).
+- **Verified:** `brew install latif-essam/tap/app-dev-clean` + `adc` alias on
+  macOS arm64, and `go install …@v0.1.0`, both reporting `0.1.0`.
+- **Still unverified: Scoop on real Windows** — the `adc` shim is a `post_install`
+  block that has never run on Windows hardware. Non-fatal by design.
+- Cutting the next release = tag a green commit; everything else is automatic.
+  See `PUBLISHING.md`. Tier 2 (homebrew-core) is prepped in `docs/homebrew-core.md`.
 - Design spec + task plan: `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 
 Local dir is `devclean` but the module/binary is `app-dev-clean` — intentional.
