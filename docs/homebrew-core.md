@@ -124,62 +124,135 @@ It is now `--new`, which *implies* `--strict` and `--online`. Use `--new` alone.
 returns 404, so nothing in core claims the name. (`app-cleaner` exists and is
 unrelated; expect a reviewer to glance at the overlap.)
 
-## Submitting it
+## State of the submission (2026-07-29)
 
-Validation is already done, so this is just the PR mechanics. Steps 1-2 clone
-homebrew-core, which is a large repo — expect it to take a few minutes.
+**A PR was opened and is currently closed. Do not open a new one.**
 
-```bash
-# 1. get a local homebrew-core checkout and branch off master
+- PR: https://github.com/Homebrew/homebrew-core/pull/296007
+- Fork: `latif-essam/homebrew-core`, branch `app-dev-clean` (pushed, still there)
+- Local checkout: `$(brew --repository homebrew/core)`, branch `app-dev-clean`
+- Commit: `app-dev-clean 0.1.0 (new formula)` — clean subject, no trailers
+
+It was auto-closed within a minute by `github-actions` with:
+
+> Thanks for your pull request. This has been closed because it appears to use an
+> incomplete or outdated pull request template. […] This workflow will reopen this
+> pull request automatically once the template is complete. **Do not open a new
+> pull request for this.**
+
+So the fix is to **edit PR 296007's body** to the completed template. The bot
+reopens it on its own. Opening a fresh PR would be the wrong move.
+
+Withdrawn deliberately at this point pending the AI-disclosure decision below —
+not because anything was wrong with the formula.
+
+## What the first attempt got wrong
+
+Four things, all now corrected in this document:
+
+1. **homebrew-core's default branch is `main`, not `master`.**
+   `git checkout -b app-dev-clean origin/master` fails outright with
+   `fatal: 'origin/master' is not a commit`. Base the PR on `main` too.
+2. **The audit flag is `--new`, not `--new-formula`.** The old name errors with
+   `invalid option: --new-formula`. `--new` implies `--strict` and `--online`.
+3. **The PR body must be the repo's template, filled in.** A hand-written
+   description — however complete — gets auto-closed. Read
+   `.github/PULL_REQUEST_TEMPLATE.md` from the checkout and fill that.
+4. **`gh repo fork --remote=false` is invalid.** `--remote` is a boolean flag;
+   use `gh repo fork Homebrew/homebrew-core --clone=false` and add the remote by
+   hand.
+
+## The AI-usage requirement — read before submitting
+
+The template's last checkbox is not a formality:
+
+> I did not use AI/LLM to create this PR, or I disclosed the tool/model below and
+> reviewed its output; I did not attribute commits to AI and **will answer
+> maintainer questions and review comments myself without AI/LLM**.
+
+Per `docs.brew.sh/Responsible-AI-Usage`: disclose the tool, explain how the
+changes were verified, personally review all AI-generated content *before* asking
+a maintainer to look at it, and answer reviewer questions yourself. The template
+adds that non-maintainers may have **only one AI-assisted PR open at a time**.
+
+If this formula was drafted with AI assistance, the honest path is the disclosure
+branch, not the "did not use AI" branch. Note the commit itself is compliant with
+the "did not attribute commits to AI" clause — it carries no trailer (see the
+commit convention in `CLAUDE.md`).
+
+**The commitment to handle review personally can only be made by the submitter.**
+That is the reason this PR is parked rather than pushed through.
+
+## Submitting (or completing PR 296007)
+
+The formula is validated, so this is template mechanics. Step 1 clones a 1.3 GB
+repo — it is the slow part and only needed once.
+
+```
 brew tap --force homebrew/core
+```
+```
 cd "$(brew --repository homebrew/core)"
-git fetch origin
-git checkout -b app-dev-clean origin/master
-
-# 2. write the formula (core shards formulae by first letter)
-#    copy the ruby block from this document into:
-#    Formula/a/app-dev-clean.rb
-
-# 3. re-run the gate in the real core context
-brew audit --new app-dev-clean
-brew style app-dev-clean
-brew install --build-from-source app-dev-clean
-brew test app-dev-clean
-
-# 4. commit — the message format matters to Homebrew
-git add Formula/a/app-dev-clean.rb
-git commit -m "app-dev-clean 0.1.0 (new formula)"
-
-# 5. push to your fork and open the PR
-gh repo fork Homebrew/homebrew-core --remote --remote-name fork
-git push fork app-dev-clean
-gh pr create --repo Homebrew/homebrew-core --base master \
-  --title "app-dev-clean 0.1.0 (new formula)" --body "…"
+```
+```
+git fetch origin && git checkout -b app-dev-clean origin/main
 ```
 
-The PR title must be exactly `app-dev-clean 0.1.0 (new formula)` — Homebrew's
+Write the formula to `Formula/a/app-dev-clean.rb` (core shards by first letter),
+copying the ruby block from this document. Then run the gate exactly as the
+template words it:
+
+```
+HOMEBREW_NO_INSTALL_FROM_API=1 brew install --build-from-source app-dev-clean
+```
+```
+brew test app-dev-clean
+```
+```
+brew audit --new app-dev-clean
+```
+```
+brew style app-dev-clean
+```
+
+Note `brew audit --new` is slow — it makes network calls and took over ten
+minutes here. Budget for that rather than assuming it hung.
+
+Commit, fork, push:
+
+```
+git add Formula/a/app-dev-clean.rb
+```
+```
+git commit -m "app-dev-clean 0.1.0 (new formula)"
+```
+```
+gh repo fork Homebrew/homebrew-core --clone=false
+```
+```
+git remote add fork https://github.com/latif-essam/homebrew-core.git
+```
+```
+git push fork app-dev-clean
+```
+
+Then set the PR body to the completed template. To finish the existing PR:
+
+```
+gh pr edit 296007 --repo Homebrew/homebrew-core --body-file <your-filled-template.md>
+```
+
+The title must be exactly `app-dev-clean 0.1.0 (new formula)` — Homebrew's
 automation parses it.
 
-Suggested PR body:
+Afterwards, restore this machine, since building from source replaces the tap
+install and drops the `adc` alias:
 
-> Cross-platform dev-cache cleaner for React Native, Expo, Flutter, native
-> Android (Gradle) and native iOS/macOS (Xcode/SwiftPM) projects. Walks up from
-> the working directory to the real project root, detects the project type(s),
-> and cleans only the caches that apply. Refuses to act outside a recognised
-> project, and `--dry-run` reports reclaimable space without deleting anything.
->
-> - Upstream: https://github.com/latif-essam/app-dev-clean
-> - Release: https://github.com/latif-essam/app-dev-clean/releases/tag/v0.1.0
-> - Licence: MIT
-> - `brew audit --new`, `brew style`, `brew install --build-from-source` and
->   `brew test` all pass locally on macOS arm64.
-
-Then restore your machine afterwards, since building from source replaces the
-tap install:
-
-```bash
+```
 brew uninstall app-dev-clean
-brew install latif-essam/tap/app-dev-clean   # brings back the adc alias
+```
+```
+brew install latif-essam/tap/app-dev-clean
 ```
 
 ### Expect review comments

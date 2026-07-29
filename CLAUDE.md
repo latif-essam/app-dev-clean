@@ -100,9 +100,9 @@ Detectors return a **set** — a repo can match several types (bare Expo is both
 
 ## Conventions
 
-- Conventional Commits, ending with a `Co-Authored-By:` trailer naming the model
-  that actually wrote the commit (e.g. `Claude Opus 5 (1M context)
-  <noreply@anthropic.com>`) — don't copy a stale model name forward.
+- Conventional Commits. **No `Co-Authored-By:` trailer and no "generated with
+  Claude" line** — the user asked for these dropped (2026-07-30). Don't reintroduce
+  them, including in PR bodies.
 - TDD: failing test → minimal implementation → green → commit.
 - Deletion always goes through `clean.Remove` so dry-run + size accounting stay
   uniform; absent paths and per-path errors are logged and skipped, never fatal.
