@@ -11,6 +11,7 @@ import (
 )
 
 type Row struct {
+	Scope  detect.Scope
 	Target string
 	Label  string
 	Desc   string
@@ -19,10 +20,20 @@ type Row struct {
 
 func Rows(local, globals []detect.Target, ctx detect.Context) []Row {
 	var rows []Row
-	if len(local) > 0 {
-		rows = append(rows, Row{Header: "LOCAL (project — fast to rebuild)"})
+	for _, section := range []struct {
+		scope detect.Scope
+		title string
+	}{{detect.Local, "LOCAL (this project)"}, {detect.Shared, "SHARED (all projects)"}} {
+		added := false
 		for _, t := range local {
-			rows = append(rows, Row{Target: t.Name, Label: t.Label, Desc: t.Desc})
+			if t.Scope != section.scope {
+				continue
+			}
+			if !added {
+				rows = append(rows, Row{Header: section.title})
+				added = true
+			}
+			rows = append(rows, Row{Target: t.Name, Label: t.Label, Desc: t.Desc, Scope: t.Scope})
 		}
 	}
 	var avail []detect.Target
@@ -34,7 +45,7 @@ func Rows(local, globals []detect.Target, ctx detect.Context) []Row {
 	if len(avail) > 0 {
 		rows = append(rows, Row{Header: "GLOBAL (shared across ALL projects)"})
 		for _, g := range avail {
-			rows = append(rows, Row{Target: g.Name, Label: g.Label, Desc: g.Desc})
+			rows = append(rows, Row{Target: g.Name, Label: g.Label, Desc: g.Desc, Scope: g.Scope})
 		}
 	}
 	rows = append(rows, Row{Header: "COMBOS"})
@@ -68,9 +79,23 @@ func (m model) firstSelectable(from, dir int) int {
 	return from
 }
 
+func isCombo(name string) bool { return name == "local-all" || name == "nuclear" }
+
 func (m model) toggle() model {
 	if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].Header == "" {
-		m.checked[m.cursor] = !m.checked[m.cursor]
+		checked := !m.checked[m.cursor]
+		if checked {
+			if isCombo(m.rows[m.cursor].Target) {
+				m.checked = map[int]bool{}
+			} else {
+				for i, row := range m.rows {
+					if isCombo(row.Target) {
+						delete(m.checked, i)
+					}
+				}
+			}
+		}
+		m.checked[m.cursor] = checked
 	}
 	return m
 }
@@ -103,8 +128,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case " ":
 		m = m.toggle()
 	case "a":
+		m.checked = map[int]bool{}
 		for i, r := range m.rows {
-			if r.Header == "" {
+			if r.Header == "" && r.Scope == detect.Local && !isCombo(r.Target) {
 				m.checked[i] = true
 			}
 		}
@@ -136,7 +162,7 @@ var (
 func (m model) View() string {
 	var b strings.Builder
 	b.WriteString(headerStyle.Render("  app-dev-clean") + "\n")
-	b.WriteString("  up/down move · SPACE toggle · a all · n none · ENTER run · q quit\n\n")
+	b.WriteString("  up/down move · SPACE toggle · a local only · n none · ENTER run · q quit\n\n")
 	for i, r := range m.rows {
 		if r.Header != "" {
 			b.WriteString("\n  " + headerStyle.Render(r.Header) + "\n")

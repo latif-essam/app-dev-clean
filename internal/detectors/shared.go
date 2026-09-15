@@ -52,7 +52,15 @@ func globalTarget(name, label, desc string, pick func(detect.Context) string) de
 		Scope: detect.Global,
 		Paths: pathsFn,
 		Run: func(ctx detect.Context) (int64, error) {
-			return clean.Remove(ctx.DryRun, pathsFn(ctx)...), nil
+			paths := pathsFn(ctx)
+			if len(paths) == 0 {
+				return 0, nil
+			}
+			root, err := clean.CacheScope(paths[0], ctx.Paths.Home, ctx.ProjectRoot)
+			if err != nil {
+				return 0, err
+			}
+			return clean.Remove(ctx.DryRun, root, paths...)
 		},
 	}
 }

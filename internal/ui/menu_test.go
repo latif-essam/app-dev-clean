@@ -1,6 +1,7 @@
 package ui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
 	"testing"
 
 	"github.com/latif-essam/app-dev-clean/internal/detect"
@@ -34,5 +35,30 @@ func TestModelToggleSelects(t *testing.T) {
 	got := m.selectedTargets()
 	if len(got) != 1 || got[0] != "js" {
 		t.Fatalf("want [js], got %v", got)
+	}
+}
+
+func TestSelectAllOnlySelectsLocalTargets(t *testing.T) {
+	rows := Rows([]detect.Target{{Name: "js"}, {Name: "metro", Scope: detect.Shared}}, []detect.Target{{Name: "pub-cache", Scope: detect.Global, Paths: func(detect.Context) []string { return []string{"/cache"} }}}, detect.Context{})
+	m := newModel(rows)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	got := updated.(model).selectedTargets()
+	if len(got) != 1 || got[0] != "js" {
+		t.Fatalf("select-all must not include shared caches or combos: %v", got)
+	}
+}
+
+func TestCombosAreExclusive(t *testing.T) {
+	m := newModel([]Row{{Target: "js"}, {Target: "local-all"}, {Target: "nuclear"}})
+	m = m.toggle()
+	m.cursor = 2
+	m = m.toggle()
+	if got := m.selectedTargets(); len(got) != 1 || got[0] != "nuclear" {
+		t.Fatalf("combo must replace individual selections: %v", got)
+	}
+	m.cursor = 0
+	m = m.toggle()
+	if got := m.selectedTargets(); len(got) != 1 || got[0] != "js" {
+		t.Fatalf("individual selection must clear combo: %v", got)
 	}
 }

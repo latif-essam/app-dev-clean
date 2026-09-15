@@ -46,9 +46,11 @@ func androidLocalIn(base func(detect.Context) string) func(detect.Context) (int6
 		if exists(wrapperPath) {
 			// Pass the ABSOLUTE wrapper path: bare "./gradlew" does not resolve
 			// relative to cmd.Dir in os/exec (see clean.Exec).
-			clean.Exec(ctx.DryRun, dir, wrapperPath, "clean")
+			if err := clean.Exec(ctx.DryRun, dir, wrapperPath, "clean"); err != nil {
+				return 0, err
+			}
 		}
-		return clean.Remove(ctx.DryRun, androidLocalPaths(dir)...), nil
+		return clean.Remove(ctx.DryRun, ctx.ProjectRoot, androidLocalPaths(dir)...)
 	}
 }
 
@@ -61,7 +63,31 @@ func androidTarget(base func(detect.Context) string, desc string) detect.Target 
 		Desc:  desc,
 		Scope: detect.Local,
 		Paths: func(ctx detect.Context) []string { return androidLocalPaths(base(ctx)) },
-		Run:   androidLocalIn(base),
+		Check: func(ctx detect.Context) error {
+			wrapper := filepath.Join(base(ctx), gradlewName())
+			if err := clean.ValidatePaths(ctx.ProjectRoot, wrapper); err != nil {
+				return err
+			}
+			if exists(wrapper) {
+				// Validate a child to check the executable's own symlink too.
+				resolved, err := filepath.EvalSymlinks(wrapper)
+				if err != nil {
+					return err
+				}
+				scope, err := filepath.EvalSymlinks(ctx.ProjectRoot)
+				if err != nil {
+					return err
+				}
+				if err := clean.ValidatePaths(scope, resolved); err != nil {
+					return err
+				}
+				if !ctx.DryRun {
+					return clean.CheckCommand(wrapper)
+				}
+			}
+			return nil
+		},
+		Run: androidLocalIn(base),
 	}
 }
 

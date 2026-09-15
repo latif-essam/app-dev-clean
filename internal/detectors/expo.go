@@ -7,13 +7,11 @@ import (
 	"github.com/latif-essam/app-dev-clean/internal/detect"
 )
 
-// expo embeds rn so it inherits rn's PostRun (npm/pod reinstall) behavior.
-// Name/Detect/Targets below shadow the embedded rn's methods.
-type expo struct{ rn }
+type expo struct{}
 
 func (expo) Name() string { return "expo" }
 
-func (expo) Detect(dir string) bool { return pkgJSONHas(dir, `"expo"`) }
+func (expo) Detect(dir string) bool { return pkgJSONHas(dir, "expo") }
 
 func expoDirPaths(root string) []string {
 	return []string{filepath.Join(root, ".expo"), filepath.Join(root, ".expo-shared")}
@@ -24,21 +22,16 @@ func (expo) Targets() []detect.Target {
 		{Name: "expo", Label: "expo", Desc: ".expo/ + prebuild caches", Scope: detect.Local,
 			Paths: func(c detect.Context) []string { return expoDirPaths(c.ProjectRoot) },
 			Run: func(c detect.Context) (int64, error) {
-				return clean.Remove(c.DryRun, expoDirPaths(c.ProjectRoot)...), nil
+				return clean.Remove(c.DryRun, c.ProjectRoot, expoDirPaths(c.ProjectRoot)...)
 			}},
-		{Name: "js", Label: "js", Desc: "node_modules + package-lock.json", Scope: detect.Local,
-			Paths: func(c detect.Context) []string {
-				return []string{filepath.Join(c.ProjectRoot, "node_modules"), filepath.Join(c.ProjectRoot, "package-lock.json")}
-			}, Run: rnJS},
-		{Name: "metro", Label: "metro", Desc: "Metro/Haste temp caches", Scope: detect.Local,
-			Paths: func(c detect.Context) []string { return nil }, Run: rnMetro},
+		jsTarget(), metroTarget(),
 	}
 	// Bare Expo also has native dirs (post-prebuild) -> include android/ios
 	// local cleanups, rooted at those subdirs exactly as for RN. In a managed
 	// project the dirs are absent and clean.Remove skips them.
 	t = append(t,
 		androidTarget(androidSubdir, "android/ build, app/build, .gradle, .cxx + gradlew clean"),
-		iosTarget(iosSubdir, "ios/ build, Pods, Podfile.lock"),
+		iosTarget(iosSubdir, "ios/ build, Pods, .build (keep Podfile.lock)"),
 	)
 	return t
 }

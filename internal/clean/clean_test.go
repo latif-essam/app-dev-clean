@@ -1,8 +1,10 @@
 package clean
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,7 +33,10 @@ func TestSize(t *testing.T) {
 func TestRemoveReal(t *testing.T) {
 	dir := mkTree(t)
 	nm := filepath.Join(dir, "node_modules")
-	freed := Remove(false, nm)
+	freed, err := Remove(false, dir, nm)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(nm); !os.IsNotExist(err) {
 		t.Fatalf("node_modules should be gone")
 	}
@@ -43,7 +48,10 @@ func TestRemoveReal(t *testing.T) {
 func TestRemoveDryRun(t *testing.T) {
 	dir := mkTree(t)
 	nm := filepath.Join(dir, "node_modules")
-	freed := Remove(true, nm)
+	freed, err := Remove(true, dir, nm)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(nm); err != nil {
 		t.Fatalf("dry-run must NOT delete: %v", err)
 	}
@@ -53,7 +61,81 @@ func TestRemoveDryRun(t *testing.T) {
 }
 
 func TestRemoveAbsentTolerated(t *testing.T) {
-	if freed := Remove(false, filepath.Join(t.TempDir(), "nope")); freed != 0 {
+	dir := t.TempDir()
+	if freed, err := Remove(false, dir, filepath.Join(dir, "nope")); freed != 0 || err != nil {
 		t.Fatalf("absent path must free 0 and not panic, got %d", freed)
+	}
+}
+
+func TestExecStreamsChildOutput(t *testing.T) {
+	if os.Getenv("ADC_EXEC_TEST_HELPER") == "1" {
+		fmt.Fprintln(os.Stdout, "install complete")
+		fmt.Fprintln(os.Stderr, "npm WARN peer dependency")
+		return
+	}
+
+	t.Setenv("ADC_EXEC_TEST_HELPER", "1")
+	stdout, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = stdout, stderr
+	t.Cleanup(func() { os.Stdout, os.Stderr = oldStdout, oldStderr })
+
+	Exec(false, t.TempDir(), os.Args[0], "-test.run=^TestExecStreamsChildOutput$")
+	os.Stdout, os.Stderr = oldStdout, oldStderr
+	if err := stdout.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := stderr.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(stdout.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := os.ReadFile(stderr.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "install complete") || !strings.Contains(string(warnings), "npm WARN peer dependency") {
+		t.Fatalf("child stdout and stderr must be visible; stdout=%q stderr=%q", out, warnings)
+	}
+}
+
+func TestScopeProtectionAndLeafSymlinks(t *testing.T) {
+	dir, outside := mkTree(t), mkTree(t)
+	for _, path := range []string{dir, outside, filepath.Join(dir, "..", "escape")} {
+		if _, err := Remove(false, dir, path); err == nil {
+			t.Fatalf("unsafe path accepted: %s", path)
+		}
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := ValidatePaths(dir, filepath.Join(link, "missing")); err == nil {
+		t.Fatal("escaping ancestor must be rejected even for missing leaves")
+	}
+	if _, err := Remove(false, dir, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "node_modules", "pkg", "f.js")); err != nil {
+		t.Fatal("leaf symlink removal must preserve destination", err)
+	}
+}
+
+func TestCacheScopeRejectsBroadDirectories(t *testing.T) {
+	home := t.TempDir()
+	project := filepath.Join(home, "dev", "app")
+	for _, path := range []string{"relative-cache", home, filepath.Dir(home), project, filepath.Dir(project)} {
+		if _, err := CacheScope(path, home, project); err == nil {
+			t.Fatalf("broad cache path accepted: %s", path)
+		}
 	}
 }

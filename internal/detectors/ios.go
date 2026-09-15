@@ -27,7 +27,6 @@ func iosLocalPaths(root string) []string {
 	return []string{
 		filepath.Join(root, "build"),
 		filepath.Join(root, "Pods"),
-		filepath.Join(root, "Podfile.lock"),
 		filepath.Join(root, ".build"), // SwiftPM
 	}
 }
@@ -42,14 +41,14 @@ func iosTarget(base func(detect.Context) string, desc string) detect.Target {
 		Scope: detect.Local,
 		Paths: func(ctx detect.Context) []string { return iosLocalPaths(base(ctx)) },
 		Run: func(ctx detect.Context) (int64, error) {
-			return clean.Remove(ctx.DryRun, iosLocalPaths(base(ctx))...), nil
+			return clean.Remove(ctx.DryRun, ctx.ProjectRoot, iosLocalPaths(base(ctx))...)
 		},
 	}
 }
 
 func (ios) Targets() []detect.Target {
 	return []detect.Target{
-		iosTarget(projectRoot, "build/, Pods, Podfile.lock, SwiftPM .build"),
+		iosTarget(projectRoot, "build/, Pods, SwiftPM .build (keep Podfile.lock)"),
 	}
 }
 

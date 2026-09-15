@@ -2,3 +2,4 @@ tests/fixtures/
 /dist/
 /app-dev-clean
 /adc
+/.local-history-backup/

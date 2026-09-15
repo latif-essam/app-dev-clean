@@ -2,18 +2,21 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/latif-essam/app-dev-clean/internal/detect"
 )
 
 type Options struct {
-	Targets    []string
-	TypeFilter string
-	DryRun     bool
-	Yes        bool
-	ShowRoot   bool
-	Help       bool
-	Version    bool
+	Targets     []string
+	TypeFilter  string
+	DryRun      bool
+	Yes         bool
+	ShowRoot    bool
+	Help        bool
+	AllowShared bool
+	Reinstall   bool
+	Version     bool
 }
 
 func parse(args []string) (Options, error) {
@@ -28,6 +31,10 @@ func parse(args []string) (Options, error) {
 			o.ShowRoot = true
 		case "--dry-run":
 			o.DryRun = true
+		case "--allow-shared":
+			o.AllowShared = true
+		case "--reinstall":
+			o.Reinstall = true
 		case "--yes", "-y":
 			o.Yes = true
 		case "--type":
@@ -36,7 +43,15 @@ func parse(args []string) (Options, error) {
 			}
 			i++
 			o.TypeFilter = args[i]
+			switch o.TypeFilter {
+			case "rn", "expo", "android", "ios", "flutter":
+			default:
+				return o, fmt.Errorf("unknown project type %q", o.TypeFilter)
+			}
 		default:
+			if strings.HasPrefix(a, "-") {
+				return o, fmt.Errorf("unknown option %q; see --help", a)
+			}
 			o.Targets = append(o.Targets, a)
 		}
 	}
@@ -49,5 +64,5 @@ func isGlobalName(name string) bool {
 			return true
 		}
 	}
-	return name == "nuclear"
+	return false
 }

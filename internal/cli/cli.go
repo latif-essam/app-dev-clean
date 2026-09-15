@@ -3,7 +3,9 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"github.com/latif-essam/app-dev-clean/internal/reinstall"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/latif-essam/app-dev-clean/internal/clean"
@@ -20,7 +22,9 @@ const usage = `app-dev-clean - cross-platform dev-cache cleaner
   app-dev-clean nuclear        local-all + global caches + reinstall (confirmed)
   app-dev-clean --type <t>     scope to one detector (rn|android|ios|flutter|expo)
   app-dev-clean --dry-run      show what would be freed; delete nothing
-  app-dev-clean -y, --yes      skip confirmation prompts
+  app-dev-clean --reinstall    reinstall selected JS/Pods using existing lockfiles
+  app-dev-clean --allow-shared allow shared/global cleanup with -y
+  app-dev-clean -y, --yes      non-interactive cleanup (no implicit reinstall)
   app-dev-clean --root         print resolved root + detected type(s)
   app-dev-clean --version      print version
   app-dev-clean --help         this help
@@ -62,6 +66,10 @@ func Run(args []string, version string) int {
 			return 1
 		}
 		ctx.ProjectRoot = res.Root
+		if o.TypeFilter != "" && typeNames(res, o.TypeFilter) == "" {
+			fmt.Fprintf(os.Stderr, "error: project does not match --type %s\n", o.TypeFilter)
+			return 2
+		}
 		fmt.Printf("==> project: %s (%s)\n", res.Root, typeNames(res, o.TypeFilter))
 	}
 
@@ -90,23 +98,140 @@ func Run(args []string, version string) int {
 		raw = o.Targets
 	}
 
-	// Detect nuclear BEFORE expansion (expandCombos replaces the token); nuclear
-	// forces unconditional reinstall. Then expand once for both paths.
+	input := bufio.NewReader(os.Stdin)
 	nuclear := containsStr(raw, "nuclear")
-	ctx.Force = nuclear
-	selected := expandCombos(raw, targets)
-
-	if !o.Yes && needsConfirm(selected) {
-		fmt.Printf("About to clean shared/global caches: %s\n", strings.Join(selected, " "))
-		if !promptYes("  These affect ALL projects. Proceed? [y/N] ") {
+	selected := expandCombos(raw, targets, ctx)
+	// Validate the entire plan before confirmations, commands, or deletion.
+	if err := preflight(ctx, selected, targets); err != nil {
+		fmt.Fprintln(os.Stderr, "error: cleanup cancelled before deletion:", err)
+		return 1
+	}
+	if !o.DryRun && needsConfirm(selected, targets) && !o.AllowShared {
+		if o.Yes {
+			fmt.Fprintln(os.Stderr, "error: shared/global cleanup affects all projects; add --allow-shared explicitly or run interactively")
+			return 2
+		}
+		fmt.Printf("Shared/global targets selected: %s\n", strings.Join(selected, " "))
+		if !promptYes(input, "  These affect ALL projects. Proceed? [y/N] ") {
 			fmt.Println("aborted")
 			return 0
 		}
 	}
-
-	freed := runTargets(ctx, res, selected, targets)
-	fmt.Printf("\nDone. Reclaimed ~%s\n", clean.Human(freed))
+	install := o.Reinstall || nuclear
+	if !install && !o.Yes && !o.DryRun && (containsStr(selected, "js") || containsStr(selected, "ios")) {
+		install = promptYes(input, "Reinstall selected dependencies from existing lockfiles after cleanup? [y/N] ")
+	}
+	var actions []reinstall.Action
+	if install {
+		actions, err = planReinstalls(ctx, selected, targets)
+		if err == nil && !o.DryRun {
+			for _, action := range actions {
+				if err = action.Check(); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error: reinstall preflight failed; nothing deleted:", err)
+			return 1
+		}
+	}
+	freed, err := runTargets(ctx, selected, targets)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nCleanup stopped after reclaiming ~%s: %v\n", clean.Human(freed), err)
+		return 1
+	}
+	for _, action := range actions {
+		if err := action.Run(o.DryRun); err != nil {
+			fmt.Fprintf(os.Stderr, "\nCleanup reclaimed ~%s, but reinstall failed: %v\nLockfiles and download caches were preserved; retry the displayed install command.\n", clean.Human(freed), err)
+			return 1
+		}
+	}
+	if o.DryRun {
+		fmt.Printf("\nDry run complete. Would reclaim ~%s\n", clean.Human(freed))
+	} else {
+		fmt.Printf("\nDone. Reclaimed ~%s\n", clean.Human(freed))
+	}
 	return 0
+}
+
+func preflight(ctx detect.Context, selected []string, local []detect.Target) error {
+	var localPaths []string
+	for _, name := range selected {
+		tg, ok := targetByName(name, local)
+		if !ok {
+			return fmt.Errorf("unknown/unavailable target %q; see --help", name)
+		}
+		var paths []string
+		if tg.Paths != nil {
+			paths = tg.Paths(ctx)
+		}
+		root := ctx.ProjectRoot
+		if tg.Scope == detect.Global {
+			if len(paths) == 0 {
+				return fmt.Errorf("%s is unavailable on this platform or cache configuration", name)
+			}
+			var err error
+			root, err = clean.CacheScope(paths[0], ctx.Paths.Home, mustCwd())
+			if err != nil {
+				return err
+			}
+		} else if tg.Scope == detect.Shared {
+			root = ctx.Paths.TmpDir
+		} else {
+			localPaths = append(localPaths, paths...)
+		}
+		if err := clean.ValidatePaths(root, paths...); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		if name == "js" {
+			if err := reinstall.CheckJSRoot(ctx.ProjectRoot); err != nil {
+				return err
+			}
+		}
+		if tg.Check != nil {
+			if err := tg.Check(ctx); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+		}
+	}
+	if len(localPaths) > 0 {
+		return clean.ProtectTracked(ctx.ProjectRoot, localPaths...)
+	}
+	return nil
+}
+
+func planReinstalls(ctx detect.Context, selected []string, local []detect.Target) ([]reinstall.Action, error) {
+	var actions []reinstall.Action
+	// CocoaPods autolinking may load modules installed by the JS action.
+	for _, name := range []string{"js", "ios"} {
+		if !containsStr(selected, name) {
+			continue
+		}
+		switch name {
+		case "js":
+			a, err := reinstall.JS(ctx.ProjectRoot)
+			if err != nil {
+				return nil, err
+			}
+			actions = append(actions, a)
+		case "ios":
+			tg, _ := targetByName(name, local)
+			for _, path := range tg.Paths(ctx) {
+				if filepath.Base(path) != "Pods" {
+					continue
+				}
+				a, err := reinstall.Pods(filepath.Dir(path), ctx.ProjectRoot)
+				if err != nil {
+					return nil, err
+				}
+				if a != nil {
+					actions = append(actions, *a)
+				}
+			}
+		}
+	}
+	return actions, nil
 }
 
 func mustCwd() string {
@@ -165,68 +290,67 @@ func targetByName(name string, local []detect.Target) (detect.Target, bool) {
 	return detect.Target{}, false
 }
 
-func expandCombos(requested []string, local []detect.Target) []string {
+func expandCombos(requested []string, local []detect.Target, contexts ...detect.Context) []string {
 	var out []string
+	seen := map[string]bool{}
+	add := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
 	for _, r := range requested {
 		switch r {
-		case "local-all":
+		case "local-all", "nuclear":
 			for _, tg := range local {
-				out = append(out, tg.Name)
+				if r == "nuclear" || tg.Scope == detect.Local {
+					add(tg.Name)
+				}
 			}
-		case "nuclear":
-			for _, tg := range local {
-				out = append(out, tg.Name)
-			}
-			for _, g := range detect.Globals() {
-				out = append(out, g.Name)
+			if r == "nuclear" {
+				for _, g := range detect.Globals() {
+					if len(contexts) > 0 && (g.Paths == nil || len(g.Paths(contexts[0])) == 0) {
+						continue
+					}
+					add(g.Name)
+				}
 			}
 		default:
-			out = append(out, r)
+			add(r)
 		}
 	}
 	return out
 }
 
-func needsConfirm(selected []string) bool {
-	for _, s := range selected {
-		if isGlobalName(s) {
+func needsConfirm(selected []string, local []detect.Target) bool {
+	for _, name := range selected {
+		if tg, ok := targetByName(name, local); ok && tg.Scope != detect.Local {
 			return true
 		}
 	}
 	return false
 }
 
-// runTargets executes each selected target (already combo-expanded), summing
-// reclaimed bytes, then runs each matched detector's PostRun hook. PostRun
-// itself decides reinstall behavior from ctx (DryRun/Force/Yes). Unknown names
-// warn and are skipped.
-func runTargets(ctx detect.Context, res *detect.Result, selected []string, local []detect.Target) int64 {
+func runTargets(ctx detect.Context, selected []string, local []detect.Target) (int64, error) {
 	var freed int64
 	for _, name := range selected {
 		tg, ok := targetByName(name, local)
 		if !ok {
-			fmt.Printf("  ! unknown target: %s\n", name)
-			continue
+			return freed, fmt.Errorf("unknown target %s", name)
 		}
+		fmt.Printf("==> %s: %s\n", tg.Label, tg.Desc)
 		f, err := tg.Run(ctx)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  ! %s: %v\n", name, err)
-		}
 		freed += f
-	}
-	if res != nil {
-		for _, d := range res.Matched {
-			if pr, ok := d.(detect.PostRunner); ok {
-				_ = pr.PostRun(ctx, selected)
-			}
+		if err != nil {
+			return freed, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return freed
+	return freed, nil
 }
 
-func promptYes(msg string) bool {
+func promptYes(input *bufio.Reader, msg string) bool {
 	fmt.Print(msg)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, _ := input.ReadString('\n')
 	line = strings.TrimSpace(strings.ToLower(line))
 	return line == "y" || line == "yes"
 }

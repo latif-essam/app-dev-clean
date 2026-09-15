@@ -32,9 +32,17 @@ func (flutter) Targets() []detect.Target {
 		Desc:  "build/, .dart_tool/ + flutter clean",
 		Scope: detect.Local,
 		Paths: func(c detect.Context) []string { return flutterLocalPaths(c.ProjectRoot) },
+		Check: func(c detect.Context) error {
+			if c.DryRun {
+				return nil
+			}
+			return clean.CheckCommand("flutter")
+		},
 		Run: func(c detect.Context) (int64, error) {
-			clean.Exec(c.DryRun, c.ProjectRoot, "flutter", "clean")
-			return clean.Remove(c.DryRun, flutterLocalPaths(c.ProjectRoot)...), nil
+			if err := clean.Exec(c.DryRun, c.ProjectRoot, "flutter", "clean"); err != nil {
+				return 0, err
+			}
+			return clean.Remove(c.DryRun, c.ProjectRoot, flutterLocalPaths(c.ProjectRoot)...)
 		},
 	}}
 }

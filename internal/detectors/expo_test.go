@@ -50,7 +50,6 @@ func TestExpoNativeTargetsUseNativeSubdirs(t *testing.T) {
 		[]string{
 			filepath.Join(root, "ios", "build"),
 			filepath.Join(root, "ios", "Pods"),
-			filepath.Join(root, "ios", "Podfile.lock"),
 		},
 		[]string{
 			filepath.Join(root, "build"),

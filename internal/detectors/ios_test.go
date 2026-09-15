@@ -41,7 +41,6 @@ func TestIOSTargetStaysAtRoot(t *testing.T) {
 		[]string{
 			filepath.Join(root, "build"),
 			filepath.Join(root, "Pods"),
-			filepath.Join(root, "Podfile.lock"),
 			filepath.Join(root, ".build"),
 		},
 		[]string{

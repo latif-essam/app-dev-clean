@@ -3,6 +3,7 @@ package detectors
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/latif-essam/app-dev-clean/internal/detect"
@@ -67,12 +68,10 @@ func TestRNNativeTargetsUseNativeSubdirs(t *testing.T) {
 		[]string{
 			filepath.Join(root, "ios", "build"),
 			filepath.Join(root, "ios", "Pods"),
-			filepath.Join(root, "ios", "Podfile.lock"),
 		},
 		[]string{
 			filepath.Join(root, "build"),
 			filepath.Join(root, "Pods"),
-			filepath.Join(root, "Podfile.lock"),
 		})
 }
 
@@ -83,6 +82,31 @@ func TestRNJSTargetStaysAtRoot(t *testing.T) {
 	assertPaths(t, targetByName(t, (rn{}).Targets(), "js"), ctx,
 		[]string{
 			filepath.Join(root, "node_modules"),
-			filepath.Join(root, "package-lock.json"),
 		}, nil)
+}
+
+func TestLockfilesAreNeverCleanupPaths(t *testing.T) {
+	root := t.TempDir()
+	ctx := detect.Context{ProjectRoot: root}
+	for _, detector := range []detect.Detector{rn{}, expo{}, ios{}} {
+		for _, target := range detector.Targets() {
+			if target.Paths == nil {
+				continue
+			}
+			for _, path := range target.Paths(ctx) {
+				if strings.Contains(filepath.Base(path), "lock") {
+					t.Errorf("%s/%s deletes a lockfile: %s", detector.Name(), target.Name, path)
+				}
+			}
+		}
+	}
+}
+
+func TestDependencyNamesInScriptsDoNotDetectRN(t *testing.T) {
+	dir := t.TempDir()
+	os.Mkdir(filepath.Join(dir, "android"), 0o755)
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"example":"react-native"}}`), 0o644)
+	if (rn{}).Detect(dir) {
+		t.Fatal("script strings must not count as dependencies")
+	}
 }

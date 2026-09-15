@@ -2,6 +2,7 @@ package clean
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -23,54 +24,175 @@ func Size(path string) int64 {
 	return total
 }
 
-func Remove(dryRun bool, paths ...string) (freed int64) {
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err != nil {
-			continue // absent -> skip silently
-		}
-		sz := Size(p)
-		if dryRun {
-			fmt.Printf("  [dry-run] would remove %s (%s)\n", p, Human(sz))
-			freed += sz
-			continue
-		}
-		if err := os.RemoveAll(p); err != nil {
-			fmt.Fprintf(os.Stderr, "  ! could not remove %s: %v\n", p, err)
-			continue
-		}
-		fmt.Printf("  removed %s (%s)\n", p, Human(sz))
-		freed += sz
+// relative never permits deleting the scope itself or paths outside it.
+func relative(root, path string) (string, error) {
+	if !filepath.IsAbs(root) || !filepath.IsAbs(path) || filepath.Dir(filepath.Clean(root)) == filepath.Clean(root) {
+		return "", fmt.Errorf("cleanup requires an absolute, non-filesystem-root scope: %q", root)
 	}
-	return freed
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("refusing to remove %q outside/beside cleanup scope %q", path, root)
+	}
+	return rel, nil
 }
 
-func Exec(dryRun bool, dir, name string, args ...string) {
-	if dryRun {
-		fmt.Printf("  [dry-run] would run: %s %s\n", name, strings.Join(args, " "))
-		return
-	}
-	// A name containing a path separator is an explicit executable path
-	// (e.g. an absolute gradlew path) — stat it directly. Otherwise resolve
-	// via PATH. Never pass a bare relative path like "./gradlew" to
-	// exec.Command: its resolution is NOT relative to cmd.Dir and varies by
-	// OS/Go version — callers must pass an absolute path instead.
-	if strings.ContainsAny(name, `/\`) {
-		if _, err := os.Stat(name); err != nil {
-			fmt.Printf("  ! %s not found; skipping\n", name)
-			return
+// ValidatePaths checks all ancestors, including when the final path is missing.
+// A leaf symlink is safe: removal unlinks it without following its destination.
+func ValidatePaths(root string, paths ...string) error {
+	for _, p := range paths {
+		rel, err := relative(root, p)
+		if err != nil {
+			return err
 		}
-	} else if _, err := exec.LookPath(name); err != nil {
-		fmt.Printf("  ! %s not found; skipping\n", name)
-		return
+		r, err := os.OpenRoot(root)
+		if err != nil {
+			return err
+		}
+		err = validate(r, rel)
+		r.Close()
+		if err != nil {
+			return fmt.Errorf("unsafe/inaccessible cleanup path %s: %w", p, err)
+		}
 	}
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
+	return nil
+}
+
+func validate(r *os.Root, rel string) error {
+	parts := strings.Split(rel, string(filepath.Separator))
+	for i := 1; i < len(parts); i++ {
+		dir := filepath.Join(parts[:i]...)
+		info, err := r.Stat(dir) // Root refuses escaping ancestor symlinks.
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%s is not a directory", dir)
+		}
+	}
+	_, err := r.Lstat(rel)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// Remove uses rooted file operations throughout traversal, so an ancestor
+// replaced with an escaping symlink after validation cannot redirect deletion.
+// Root.RemoveAll requires Go 1.25; this traversal also supports our Go 1.24 floor.
+func Remove(dryRun bool, root string, paths ...string) (freed int64, err error) {
+	if err = ValidatePaths(root, paths...); err != nil {
+		return 0, err
+	}
+	if len(paths) == 0 {
+		return 0, nil
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+	for _, p := range paths {
+		rel, err := relative(root, p)
+		if err != nil {
+			return freed, err
+		}
+		if _, err := r.Lstat(rel); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return freed, err
+		}
+		if !dryRun {
+			fmt.Printf("  removing %s...\n", p)
+		}
+		sz, err := removeTree(r, rel, dryRun)
+		freed += sz
+		if err != nil {
+			return freed, fmt.Errorf("remove %s: %w", p, err)
+		}
+		if dryRun {
+			fmt.Printf("  [dry-run] would remove %s (%s)\n", p, Human(sz))
+		} else {
+			fmt.Printf("  removed %s (%s)\n", p, Human(sz))
+		}
+	}
+	return freed, nil
+}
+
+func removeTree(r *os.Root, path string, dryRun bool) (int64, error) {
+	info, err := r.Lstat(path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !info.IsDir() {
+		if !dryRun {
+			if err := r.Remove(path); err != nil {
+				return 0, err
+			}
+		}
+		return info.Size(), nil
+	}
+	// OpenRoot holds this directory even if its parent entry changes during work.
+	sub, err := r.OpenRoot(path)
+	if err != nil {
+		return 0, err
+	}
+	defer sub.Close()
+	f, err := sub.Open(".")
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	var total int64
+	for {
+		names, readErr := f.Readdirnames(128)
+		for _, name := range names {
+			n, err := removeTree(sub, name, dryRun)
+			total += n
+			if err != nil {
+				return total, err
+			}
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				return total, readErr
+			}
+			break
+		}
+	}
+	if !dryRun {
+		f.Close()
+		sub.Close()
+		err = r.Remove(path)
+	}
+	return total, err
+}
+
+func CheckCommand(name string) error {
+	_, err := Command("", name)
+	return err
+}
+
+func Exec(dryRun bool, dir, name string, args ...string) error {
+	if dryRun {
+		fmt.Printf("  [dry-run] would run in %s: %s %s\n", dir, name, strings.Join(args, " "))
+		return nil
+	}
+	cmd, err := Command(dir, name, args...)
+	if err != nil {
+		return err
+	}
+	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, os.Stdin, os.Stdout, os.Stderr
+	fmt.Printf("==> %s %s\n", filepath.Base(name), strings.Join(args, " "))
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("  ! %s failed (continuing): %v\n", name, err)
+		return fmt.Errorf("%s failed: %w", name, err)
 	}
+	return nil
 }
 
 func Human(b int64) string {
@@ -84,4 +206,81 @@ func Human(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// CacheScope anchors home caches at home, keeping symlinked ancestors confined.
+// An explicitly configured external cache uses its nearest existing parent.
+func CacheScope(path, home, project string) (string, error) {
+	if !filepath.IsAbs(path) || filepath.Dir(filepath.Clean(path)) == filepath.Clean(path) {
+		return "", fmt.Errorf("unsafe cache directory %q; use an absolute cache path", path)
+	}
+	for _, protected := range []string{home, project} {
+		if protected == "" {
+			continue
+		}
+		rel, err := filepath.Rel(path, protected)
+		if err == nil && (rel == "." || filepath.IsLocal(rel)) {
+			return "", fmt.Errorf("cache %s contains a protected home/project directory", path)
+		}
+	}
+	if filepath.IsAbs(home) {
+		if rel, err := filepath.Rel(home, path); err == nil && rel != "." && filepath.IsLocal(rel) {
+			return home, nil
+		}
+	}
+	root := filepath.Dir(path)
+	for {
+		info, err := os.Stat(root)
+		if err == nil && info.IsDir() {
+			break
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			break
+		}
+		root = parent
+	}
+	if _, err := relative(root, path); err != nil {
+		return "", err
+	}
+	return root, nil
+}
+
+// ProtectTracked prevents named output directories from erasing versioned data.
+// Git is required only when the project is inside a repository.
+func ProtectTracked(root string, paths ...string) error {
+	inRepo := false
+	for dir := root; ; dir = filepath.Dir(dir) {
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+			inRepo = true
+			break
+		}
+		if filepath.Dir(dir) == dir {
+			break
+		}
+	}
+	if !inRepo {
+		return nil
+	}
+	args := []string{"-C", root, "ls-files", "--cached", "-z", "--"}
+	for _, path := range paths {
+		rel, err := relative(root, path)
+		if err != nil {
+			return err
+		}
+		args = append(args, filepath.ToSlash(rel))
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), "GIT_LITERAL_PATHSPECS=1")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("cannot verify tracked-file protection: %w", err)
+	}
+	if len(out) > 0 {
+		return fmt.Errorf("refusing to delete tracked data: %s; move versioned files outside cleanup directories first", strings.Split(string(out), "\x00")[0])
+	}
+	return nil
 }

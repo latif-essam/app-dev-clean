@@ -23,19 +23,34 @@ func detectFor(goos string, env func(string) string) Paths {
 		home = env("USERPROFILE")
 	}
 	p := Paths{Home: home}
-	p.GradleCache = filepath.Join(home, ".gradle", "caches")
+	// Missing home must never produce a relative cleanup path.
+	joinHome := func(parts ...string) string {
+		if home == "" {
+			return ""
+		}
+		return filepath.Join(append([]string{home}, parts...)...)
+	}
+	p.GradleCache = joinHome(".gradle", "caches")
 	switch goos {
 	case "windows":
-		p.PubCache = filepath.Join(env("LOCALAPPDATA"), "Pub", "Cache")
+		if local := env("LOCALAPPDATA"); local != "" {
+			p.PubCache = filepath.Join(local, "Pub", "Cache")
+		}
 		p.TmpDir = env("TEMP")
 	case "darwin":
-		p.XcodeDD = filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData")
-		p.CocoaPods = filepath.Join(home, "Library", "Caches", "CocoaPods")
-		p.PubCache = filepath.Join(home, ".pub-cache")
+		p.XcodeDD = joinHome("Library", "Developer", "Xcode", "DerivedData")
+		p.CocoaPods = joinHome("Library", "Caches", "CocoaPods")
+		p.PubCache = joinHome(".pub-cache")
 		p.TmpDir = tmpOr(env, "/tmp")
 	default: // linux and others
-		p.PubCache = filepath.Join(home, ".pub-cache")
+		p.PubCache = joinHome(".pub-cache")
 		p.TmpDir = tmpOr(env, "/tmp")
+	}
+	if gradle := env("GRADLE_USER_HOME"); gradle != "" {
+		p.GradleCache = filepath.Join(gradle, "caches")
+	}
+	if pub := env("PUB_CACHE"); pub != "" {
+		p.PubCache = pub
 	}
 	return p
 }

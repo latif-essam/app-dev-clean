@@ -42,3 +42,18 @@ func TestDetectForWindows(t *testing.T) {
 		t.Fatalf("windows tmp wrong: %q", p.TmpDir)
 	}
 }
+
+func TestConfiguredCachePaths(t *testing.T) {
+	p := detectFor("linux", envFrom(map[string]string{"HOME": "/home/x", "GRADLE_USER_HOME": "/opt/gradle", "PUB_CACHE": "/opt/pub"}))
+	if p.GradleCache != filepath.Join("/opt/gradle", "caches") || p.PubCache != "/opt/pub" {
+		t.Fatalf("environment overrides ignored: %+v", p)
+	}
+}
+func TestMissingHomeDoesNotCreateRelativeCaches(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		p := detectFor(goos, envFrom(nil))
+		if p.GradleCache != "" || p.XcodeDD != "" || p.CocoaPods != "" || p.PubCache != "" {
+			t.Fatalf("missing home generated destructive relative paths: %+v", p)
+		}
+	}
+}
