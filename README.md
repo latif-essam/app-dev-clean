@@ -107,6 +107,7 @@ package manager to repair its dependencies explicitly.
 
 - Unknown options, invalid targets, and mismatched project types stop cleanup.
 - Every selected cleanup path is checked before any selected target runs.
+- Cache overrides reject home/project roots, common personal folders, and regular files.
 - Direct deletion is confined to the project or selected cache scope. Escaping
   ancestor symlinks are rejected; leaf symlinks are unlinked without following them.
 - Local cleanup refuses to delete Git-tracked files in its named output paths.

@@ -139,3 +139,34 @@ func TestCacheScopeRejectsBroadDirectories(t *testing.T) {
 		}
 	}
 }
+
+func TestCacheScopeRejectsPersonalFoldersAndProjectRoots(t *testing.T) {
+	home := t.TempDir()
+	current := filepath.Join(home, "current")
+	for _, name := range []string{"Documents", ".ssh", "Library"} {
+		path := filepath.Join(home, name)
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CacheScope(path, home, current); err == nil {
+			t.Errorf("personal folder accepted as cache: %s", name)
+		}
+	}
+	project := filepath.Join(home, "another-project")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "package.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CacheScope(project, home, current); err == nil {
+		t.Error("another project root accepted as cache")
+	}
+	file := filepath.Join(home, "credentials")
+	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CacheScope(file, home, current); err == nil {
+		t.Error("regular file accepted as cache")
+	}
+}

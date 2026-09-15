@@ -214,6 +214,28 @@ func CacheScope(path, home, project string) (string, error) {
 	if !filepath.IsAbs(path) || filepath.Dir(filepath.Clean(path)) == filepath.Clean(path) {
 		return "", fmt.Errorf("unsafe cache directory %q; use an absolute cache path", path)
 	}
+	path = filepath.Clean(path)
+	info, err := os.Lstat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if err == nil && !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		return "", fmt.Errorf("cache path must be a directory: %s", path)
+	}
+	if filepath.IsAbs(home) {
+		for _, name := range []string{"Desktop", "Documents", "Downloads", "Pictures", "Music", "Movies", "Videos", "Library", "AppData", "Applications", ".ssh", ".gnupg", ".config", ".local"} {
+			if strings.EqualFold(path, filepath.Join(home, name)) {
+				return "", fmt.Errorf("refusing to use personal directory %s as a cache", path)
+			}
+		}
+	}
+	for _, marker := range []string{".git", "package.json", "pubspec.yaml", "go.mod", "Cargo.toml", "Package.swift", "settings.gradle", "settings.gradle.kts"} {
+		if _, err := os.Lstat(filepath.Join(path, marker)); err == nil {
+			return "", fmt.Errorf("refusing to use project directory %s as a cache (%s present)", path, marker)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+	}
 	for _, protected := range []string{home, project} {
 		if protected == "" {
 			continue

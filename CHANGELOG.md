@@ -5,6 +5,7 @@
 - Stream cleanup and install output, including warnings, to the terminal.
 - Reject unknown options, invalid targets, and mismatched project types before cleanup.
 - Validate all selected paths before deletion and confine direct removal to its scope.
+- Reject cache overrides pointing at personal folders, project roots, or regular files.
 - Refuse cleanup of Git-tracked files in named project output directories.
 - Preserve dependency lockfiles and download caches during local cleanup.
 - Plan reinstall once per target, with JavaScript dependencies installed before Pods.
