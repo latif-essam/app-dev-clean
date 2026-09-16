@@ -1,0 +1,31 @@
+{
+  "version": "app-dev-clean dev-6371ead",
+  "fixture": "Local demo Expo dependency; no registry downloads",
+  "normalization": "Temporary project path replaced with ~/demo-app; playback paced for reading",
+  "scenes": [
+    {
+      "title": "01 / Find the project",
+      "note": "Start inside your app. Check the detected root.",
+      "command": "app-dev-clean --root",
+      "output": "==> project: ~/demo-app (expo)\n~/demo-app\ntypes: expo\n"
+    },
+    {
+      "title": "02 / Preview the reset",
+      "note": "Dry-run lists the deletion and install command.",
+      "command": "app-dev-clean js --reinstall --dry-run -y",
+      "output": "==> project: ~/demo-app (expo)\n==> js: node_modules (keep lockfiles and download caches)\n  [dry-run] would remove ~/demo-app/node_modules (32.3 KB)\n  [dry-run] would run in ~/demo-app: npm ci --prefer-offline\n\nDry run complete. Would reclaim ~32.3 KB\n"
+    },
+    {
+      "title": "03 / Clean + reinstall",
+      "note": "Real npm output, streamed by app-dev-clean.",
+      "command": "app-dev-clean js --reinstall -y",
+      "output": "==> project: ~/demo-app (expo)\n==> js: node_modules (keep lockfiles and download caches)\n  removing ~/demo-app/node_modules...\n  removed ~/demo-app/node_modules (32.3 KB)\n==> npm ci --prefer-offline\n\nadded 1 package in 154ms\n\nDone. Reclaimed ~32.3 KB\n"
+    },
+    {
+      "title": "04 / Back to your project",
+      "note": "Verified by the demo capture script.",
+      "command": "",
+      "output": "package-lock.json   unchanged (SHA-256 checked)\nApp.js              unchanged (SHA-256 checked)\nnode_modules/expo   reinstalled from a local fixture\n\nPreview first. Select the target you actually need."
+    }
+  ]
+}
