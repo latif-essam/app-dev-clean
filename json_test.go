@@ -55,12 +55,20 @@ func TestJSONPlanDeletesNothing(t *testing.T) {
 	if r.Executed || r.FreedTotal != 0 || r.Error != nil {
 		t.Fatalf("plan must not execute: %+v", r)
 	}
-	want, err := filepath.EvalSymlinks(dir)
+	if r.Project == nil {
+		t.Fatal("plan must name the project")
+	}
+	// Compare by identity: macOS reports /private/var and Windows 8.3 names.
+	got, err := os.Stat(r.Project.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Project == nil || r.Project.Root != want {
-		t.Fatalf("plan must name the project %s, got %+v", want, r.Project)
+	want, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(got, want) {
+		t.Fatalf("plan must name %s, got %s", dir, r.Project.Root)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "node_modules", "fixture")); err != nil {
 		t.Fatalf("plan deleted dependencies: %v", err)
