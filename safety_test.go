@@ -279,3 +279,43 @@ func TestVersionAndWorkspacePreflight(t *testing.T) {
 		})
 	}
 }
+
+func withoutGit(dir string, args ...string) *exec.Cmd {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH=")
+	return cmd
+}
+
+func TestMissingGitBlocksCleanupButNotPreview(t *testing.T) {
+	bin := buildBin(t)
+	t.Run("dry run previews", func(t *testing.T) {
+		dir := safetyProject(t)
+		if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		out, err := withoutGit(dir, bin, "js", "--dry-run", "-y").CombinedOutput()
+		if err != nil {
+			t.Fatalf("dry run must survive a missing git: %v\n%s", err, out)
+		}
+		if !strings.Contains(string(out), "git is unavailable") {
+			t.Fatalf("want a warning about git, got:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "node_modules", "fixture")); err != nil {
+			t.Fatalf("dry run deleted dependencies: %v", err)
+		}
+	})
+	t.Run("cleanup refuses", func(t *testing.T) {
+		dir := safetyProject(t)
+		if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		out, err := withoutGit(dir, bin, "js", "-y").CombinedOutput()
+		if err == nil {
+			t.Fatalf("cleanup must refuse when tracked files cannot be checked:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "node_modules", "fixture")); err != nil {
+			t.Fatalf("refused cleanup still deleted dependencies: %v", err)
+		}
+	})
+}

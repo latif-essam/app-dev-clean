@@ -1,6 +1,7 @@
 package clean
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -168,5 +169,28 @@ func TestCacheScopeRejectsPersonalFoldersAndProjectRoots(t *testing.T) {
 	}
 	if _, err := CacheScope(file, home, current); err == nil {
 		t.Error("regular file accepted as cache")
+	}
+}
+
+func TestProtectTrackedWithoutGit(t *testing.T) {
+	dir := mkTree(t)
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "")
+	err := ProtectTracked(dir, filepath.Join(dir, "node_modules"))
+	if !errors.Is(err, ErrGitUnavailable) {
+		t.Fatalf("want ErrGitUnavailable, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "install Git") {
+		t.Fatalf("error must say how to fix it, got %v", err)
+	}
+}
+
+func TestProtectTrackedOutsideRepoIgnoresMissingGit(t *testing.T) {
+	dir := mkTree(t)
+	t.Setenv("PATH", "")
+	if err := ProtectTracked(dir, filepath.Join(dir, "node_modules")); err != nil {
+		t.Fatalf("no repository means no git needed, got %v", err)
 	}
 }

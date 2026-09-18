@@ -1,6 +1,7 @@
 package clean
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -9,6 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+// ErrGitUnavailable reports that git is missing, so tracked-file protection
+// could not run.
+var ErrGitUnavailable = errors.New("git executable not found")
 
 func Size(path string) int64 {
 	var total int64
@@ -287,6 +292,10 @@ func ProtectTracked(root string, paths ...string) error {
 	if !inRepo {
 		return nil
 	}
+	gitPath, lookErr := exec.LookPath("git")
+	if lookErr != nil {
+		return fmt.Errorf("%w: cannot verify that cleanup would spare Git-tracked files in %s; install Git and retry, or clean a project that is not in a Git repository", ErrGitUnavailable, root)
+	}
 	args := []string{"-C", root, "ls-files", "--cached", "-z", "--"}
 	for _, path := range paths {
 		rel, err := relative(root, path)
@@ -295,7 +304,7 @@ func ProtectTracked(root string, paths ...string) error {
 		}
 		args = append(args, filepath.ToSlash(rel))
 	}
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command(gitPath, args...)
 	cmd.Env = append(os.Environ(), "GIT_LITERAL_PATHSPECS=1")
 	out, err := cmd.Output()
 	if err != nil {
