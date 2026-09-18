@@ -1,0 +1,53 @@
+name: Bug report
+description: Something was cleaned, refused, or reported incorrectly.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `app-dev-clean --version`.
+      placeholder: "0.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Linux, Windows]
+    validations:
+      required: true
+  - type: dropdown
+    id: project
+    attributes:
+      label: Project type
+      options: [React Native, Expo, Flutter, Android, iOS, Other]
+    validations:
+      required: true
+  - type: input
+    id: manager
+    attributes:
+      label: Package manager
+      placeholder: "npm, pnpm, Yarn, Bun, CocoaPods, Gradle"
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Dry-run output
+      description: >
+        Output of the same command with `--dry-run`, or `--json` if that is
+        easier to paste. Remove credentials and private paths.
+      render: shell
