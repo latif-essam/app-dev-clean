@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 - 2026-09-18
 
 - Show each menu entry's reclaimable size, measured in the background.
 - Add `--json` for a machine-readable plan or result, with progress on stderr.

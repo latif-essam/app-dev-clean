@@ -37,7 +37,7 @@ distribution through the project's tap can proceed independently.
 ## Investigate after feedback
 
 - [ ] Safer workspace-aware JS cleanup with explicit ownership boundaries.
-- [ ] A machine-readable cleanup plan for scripts and CI.
+- [x] A machine-readable cleanup plan for scripts and CI (`--json`).
 - [ ] Better guidance when an install fails after cleanup.
 - [ ] Document package-manager cache configuration for CI before considering any remote-cache integration.
 
