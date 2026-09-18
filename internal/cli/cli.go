@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,12 +27,13 @@ const usage = `app-dev-clean - cross-platform dev-cache cleaner
   app-dev-clean --reinstall    reinstall selected JS/Pods using existing lockfiles
   app-dev-clean --allow-shared allow shared/global cleanup with -y
   app-dev-clean -y, --yes      non-interactive cleanup (no implicit reinstall)
+  app-dev-clean --json         machine-readable report on stdout (no prompts)
   app-dev-clean --root         print resolved root + detected type(s)
   app-dev-clean --version      print version
   app-dev-clean --help         this help
 `
 
-func Run(args []string, version string) int {
+func Run(args []string, version string) (code int) {
 	o, err := parse(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -44,6 +46,24 @@ func Run(args []string, version string) int {
 	case o.Version:
 		fmt.Println("app-dev-clean", version)
 		return 0
+	}
+
+	// JSON mode keeps stdout for the report alone; progress moves to stderr.
+	out := io.Writer(os.Stdout)
+	var report *jsonReport
+	var runErr error
+	if o.JSON {
+		out, clean.Out = os.Stderr, os.Stderr
+		report = newReport(version, o.DryRun)
+		defer func() {
+			report.fail(runErr)
+			report.emit()
+		}()
+	}
+	fail := func(c int, err error) int {
+		runErr = err
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return c
 	}
 
 	paths := platform.Detect()
@@ -61,6 +81,7 @@ func Run(args []string, version string) int {
 	if !onlyGlobals || len(o.Targets) == 0 {
 		res, err = detect.Resolve(mustCwd())
 		if err != nil {
+			runErr = err
 			fmt.Fprintln(os.Stderr, "✗ not inside a recognized project.")
 			fmt.Fprintln(os.Stderr, "  refusing local cleanup so nothing is deleted in the wrong place.")
 			fmt.Fprintln(os.Stderr, "  cd into a project, or run a global target (e.g. gradle-global).")
@@ -68,23 +89,30 @@ func Run(args []string, version string) int {
 		}
 		ctx.ProjectRoot = res.Root
 		if o.TypeFilter != "" && typeNames(res, o.TypeFilter) == "" {
-			fmt.Fprintf(os.Stderr, "error: project does not match --type %s\n", o.TypeFilter)
-			return 2
+			return fail(2, fmt.Errorf("project does not match --type %s", o.TypeFilter))
 		}
-		fmt.Printf("==> project: %s (%s)\n", res.Root, typeNames(res, o.TypeFilter))
+		if report != nil {
+			report.Project = &jsonProject{Root: res.Root, Types: typeList(res, o.TypeFilter)}
+		}
+		fmt.Fprintf(out, "==> project: %s (%s)\n", res.Root, typeNames(res, o.TypeFilter))
 	}
 
 	if o.ShowRoot {
 		if res == nil {
-			fmt.Fprintln(os.Stderr, "✗ not a project")
-			return 1
+			return fail(1, fmt.Errorf("not a project"))
 		}
-		fmt.Println(res.Root)
-		fmt.Println("types:", typeNames(res, ""))
+		fmt.Fprintln(out, res.Root)
+		fmt.Fprintln(out, "types:", typeNames(res, ""))
 		return 0
 	}
 
 	targets := collectTargets(res, o.TypeFilter)
+
+	// --json with nothing named reports what could be cleaned, and deletes nothing.
+	if report != nil && len(o.Targets) == 0 {
+		report.Targets = planTargets(ctx, targets)
+		return 0
+	}
 
 	// Gather raw selections (menu rows OR CLI args, either may include combos).
 	var raw []string
@@ -92,7 +120,7 @@ func Run(args []string, version string) int {
 		rows := ui.Rows(targets, detect.Globals(), ctx)
 		raw = ui.Run(rows)
 		if len(raw) == 0 {
-			fmt.Println("nothing selected")
+			fmt.Fprintln(out, "nothing selected")
 			return 0
 		}
 	} else {
@@ -104,17 +132,15 @@ func Run(args []string, version string) int {
 	selected := expandCombos(raw, targets, ctx)
 	// Validate the entire plan before confirmations, commands, or deletion.
 	if err := preflight(ctx, selected, targets); err != nil {
-		fmt.Fprintln(os.Stderr, "error: cleanup cancelled before deletion:", err)
-		return 1
+		return fail(1, fmt.Errorf("cleanup cancelled before deletion: %w", err))
 	}
 	switch sharedGate(o, selected, targets) {
 	case gateRefuse:
-		fmt.Fprintln(os.Stderr, "error: shared/global cleanup affects all projects; add --allow-shared explicitly or run interactively")
-		return 2
+		return fail(2, fmt.Errorf("shared/global cleanup affects all projects; add --allow-shared explicitly or run interactively"))
 	case gateAsk:
-		fmt.Printf("Shared/global targets selected: %s\n", strings.Join(selected, " "))
+		fmt.Fprintf(out, "Shared/global targets selected: %s\n", strings.Join(selected, " "))
 		if !promptYes(input, "  These affect ALL projects. Proceed? [y/N] ") {
-			fmt.Println("aborted")
+			fmt.Fprintln(out, "aborted")
 			return 0
 		}
 	}
@@ -133,27 +159,68 @@ func Run(args []string, version string) int {
 			}
 		}
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "error: reinstall preflight failed; nothing deleted:", err)
-			return 1
+			return fail(1, fmt.Errorf("reinstall preflight failed; nothing deleted: %w", err))
+		}
+		if report != nil {
+			for _, a := range actions {
+				report.Reinstall = append(report.Reinstall, jsonReinstall{Target: a.Target, Dir: a.Dir, Command: a.Command, Args: a.Args})
+			}
 		}
 	}
-	freed, err := runTargets(ctx, selected, targets)
+	results, freed, err := runTargets(ctx, selected, targets, out)
+	if report != nil {
+		report.Targets, report.FreedTotal, report.Executed = results, freed, true
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nCleanup stopped after reclaiming ~%s: %v\n", clean.Human(freed), err)
-		return 1
+		fmt.Fprintf(os.Stderr, "\nCleanup stopped after reclaiming ~%s\n", clean.Human(freed))
+		return fail(1, err)
 	}
 	for _, action := range actions {
 		if err := action.Run(o.DryRun); err != nil {
-			fmt.Fprintf(os.Stderr, "\nCleanup reclaimed ~%s, but reinstall failed: %v\nLockfiles and download caches were preserved; retry the displayed install command.\n", clean.Human(freed), err)
-			return 1
+			fmt.Fprintf(os.Stderr, "\nCleanup reclaimed ~%s. Lockfiles and download caches were preserved; retry the displayed install command.\n", clean.Human(freed))
+			return fail(1, fmt.Errorf("reinstall failed: %w", err))
 		}
 	}
 	if o.DryRun {
-		fmt.Printf("\nDry run complete. Would reclaim ~%s\n", clean.Human(freed))
+		fmt.Fprintf(out, "\nDry run complete. Would reclaim ~%s\n", clean.Human(freed))
 	} else {
-		fmt.Printf("\nDone. Reclaimed ~%s\n", clean.Human(freed))
+		fmt.Fprintf(out, "\nDone. Reclaimed ~%s\n", clean.Human(freed))
 	}
 	return 0
+}
+
+// planTargets measures every available target without deleting anything.
+func planTargets(ctx detect.Context, local []detect.Target) []jsonTarget {
+	out := []jsonTarget{}
+	all := append(append([]detect.Target{}, local...), detect.Globals()...)
+	for _, tg := range all {
+		var paths []string
+		if tg.Paths != nil {
+			paths = tg.Paths(ctx)
+		}
+		if len(paths) == 0 {
+			continue
+		}
+		var size int64
+		for _, p := range paths {
+			size += clean.Size(p)
+		}
+		out = append(out, jsonTarget{Name: tg.Name, Scope: scopeName(tg.Scope), Paths: paths, Size: size})
+	}
+	return out
+}
+
+func typeList(res *detect.Result, filter string) []string {
+	names := []string{}
+	if res == nil {
+		return names
+	}
+	for _, d := range res.Matched {
+		if filter == "" || d.Name() == filter {
+			names = append(names, d.Name())
+		}
+	}
+	return names
 }
 
 func preflight(ctx detect.Context, selected []string, local []detect.Target) error {
@@ -342,7 +409,7 @@ func sharedGate(o Options, selected []string, local []detect.Target) gate {
 	if o.DryRun || o.AllowShared || !needsConfirm(selected, local) {
 		return gateProceed
 	}
-	if o.Yes {
+	if o.Yes || o.JSON {
 		return gateRefuse
 	}
 	return gateAsk
@@ -353,7 +420,7 @@ func reinstallDecision(o Options, selected []string, nuclear bool) (install, ask
 	if o.Reinstall || nuclear {
 		return true, false
 	}
-	if o.Yes || o.DryRun {
+	if o.Yes || o.DryRun || o.JSON {
 		return false, false
 	}
 	return false, containsStr(selected, "js") || containsStr(selected, "ios")
@@ -368,21 +435,32 @@ func needsConfirm(selected []string, local []detect.Target) bool {
 	return false
 }
 
-func runTargets(ctx detect.Context, selected []string, local []detect.Target) (int64, error) {
+func runTargets(ctx detect.Context, selected []string, local []detect.Target, out io.Writer) ([]jsonTarget, int64, error) {
 	var freed int64
+	results := []jsonTarget{}
 	for _, name := range selected {
 		tg, ok := targetByName(name, local)
 		if !ok {
-			return freed, fmt.Errorf("unknown target %s", name)
+			return results, freed, fmt.Errorf("unknown target %s", name)
 		}
-		fmt.Printf("==> %s: %s\n", tg.Label, tg.Desc)
+		fmt.Fprintf(out, "==> %s: %s\n", tg.Label, tg.Desc)
 		f, err := tg.Run(ctx)
 		freed += f
+		entry := jsonTarget{Name: tg.Name, Scope: scopeName(tg.Scope), Paths: []string{}, Size: f}
+		if tg.Paths != nil {
+			if p := tg.Paths(ctx); p != nil {
+				entry.Paths = p
+			}
+		}
+		if !ctx.DryRun {
+			entry.Freed = f
+		}
+		results = append(results, entry)
 		if err != nil {
-			return freed, fmt.Errorf("%s: %w", name, err)
+			return results, freed, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return freed, nil
+	return results, freed, nil
 }
 
 func promptYes(input *bufio.Reader, msg string) bool {

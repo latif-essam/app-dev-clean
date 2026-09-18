@@ -33,6 +33,50 @@ reinstallation. It requires a recognized project and the same shared-cache
 consent. Prefer individual targets when diagnosing a problem: global cache
 removal can require downloading dependencies again.
 
+## Machine-readable output
+
+`--json` writes one report to stdout and moves progress to stderr, so the output
+stays parseable while a pipeline still shows what happened.
+
+```sh
+app-dev-clean --json                    # What could be cleaned, and how large
+app-dev-clean js --json --dry-run       # Preview one target
+app-dev-clean js --json                 # Clean, then report the freed bytes
+```
+
+With no target named, the report lists every available target and deletes
+nothing. `--json` never prompts, so shared and global targets need
+`--allow-shared` and reinstalls need `--reinstall`.
+
+```json
+{
+  "version": "0.3.0",
+  "dryRun": false,
+  "executed": true,
+  "project": { "root": "/path/to/app", "types": ["rn"] },
+  "targets": [
+    {
+      "name": "js",
+      "scope": "local",
+      "paths": ["/path/to/app/node_modules"],
+      "size": 432013312,
+      "freed": 432013312
+    }
+  ],
+  "freedTotal": 432013312,
+  "reinstall": [],
+  "error": null
+}
+```
+
+`size` is what the target occupies, `freed` is what this run deleted and stays
+`0` on a dry run. A failed run still writes the report with `error` set and
+exits non-zero.
+
+```sh
+app-dev-clean js -y --json | jq .freedTotal
+```
+
 ## Cleanup targets
 
 | Project | Target | Removed or reset |

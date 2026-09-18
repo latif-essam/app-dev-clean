@@ -26,6 +26,8 @@ func TestSharedGate(t *testing.T) {
 		{"shared allowed interactively", Options{AllowShared: true}, []string{"metro"}, gateProceed},
 		{"dry run never gates", Options{DryRun: true, Yes: true}, []string{"metro"}, gateProceed},
 		{"mixed selection gates", Options{Yes: true}, []string{"js", "metro"}, gateRefuse},
+		{"json cannot prompt", Options{JSON: true}, []string{"metro"}, gateRefuse},
+		{"json with --allow-shared", Options{JSON: true, AllowShared: true}, []string{"metro"}, gateProceed},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -52,6 +54,8 @@ func TestReinstallDecision(t *testing.T) {
 		{"android never asks", Options{}, []string{"android"}, false, false, false},
 		{"-y never asks", Options{Yes: true}, []string{"js"}, false, false, false},
 		{"dry run never asks", Options{DryRun: true}, []string{"js"}, false, false, false},
+		{"json never asks", Options{JSON: true}, []string{"js"}, false, false, false},
+		{"json honours --reinstall", Options{JSON: true, Reinstall: true}, []string{"js"}, false, true, false},
 		{"--reinstall wins over -y", Options{Reinstall: true, Yes: true}, []string{"js"}, false, true, false},
 	}
 	for _, c := range cases {

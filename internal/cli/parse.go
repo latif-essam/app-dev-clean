@@ -13,6 +13,7 @@ type Options struct {
 	DryRun      bool
 	Yes         bool
 	ShowRoot    bool
+	JSON        bool
 	Help        bool
 	AllowShared bool
 	Reinstall   bool
@@ -29,6 +30,8 @@ func parse(args []string) (Options, error) {
 			o.Version = true
 		case "--root":
 			o.ShowRoot = true
+		case "--json":
+			o.JSON = true
 		case "--dry-run":
 			o.DryRun = true
 		case "--allow-shared":
