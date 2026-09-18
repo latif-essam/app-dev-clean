@@ -2,9 +2,6 @@
 
 [Back to the README](../README.md) · [First cleanup](quickstart.md)
 
-The published release is currently **v0.1.0**. It predates the safety and reinstall
-changes documented on `main`. Use a source build to try those changes today.
-
 ## Package managers
 
 | System | Prerequisite | Install |
@@ -147,7 +144,7 @@ the CLI does not restore files removed by previous cleanup operations.
 1. Open a new terminal after changing PATH.
 2. Check `command -v app-dev-clean` on macOS/Linux or `Get-Command app-dev-clean -All` on Windows.
 3. Run `app-dev-clean --version` and `app-dev-clean --help`.
-4. If a new flag is unavailable, check for a v0.1.0 binary earlier on PATH.
+4. If a new flag is unavailable, check for an older binary earlier on PATH.
 
 For Go installs, `go env GOBIN GOPATH` shows the configured locations. An empty
 `GOBIN` means the executable normally lives in the `bin` directory under `GOPATH`.

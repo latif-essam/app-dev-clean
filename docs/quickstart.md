@@ -2,9 +2,8 @@
 
 [Back to the README](../README.md) · [Install](install.md) · [All commands](usage.md)
 
-This tutorial uses the current source, including changes not yet in v0.1.0.
-[Build from source](install.md#build-the-current-source) first. Use a project
-you know, and stop development servers/builds before resetting their outputs.
+Use a project you know, and stop development servers/builds before resetting
+their outputs.
 
 ## 1. Check the project
 

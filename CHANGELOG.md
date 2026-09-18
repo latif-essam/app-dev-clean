@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 - 2026-09-18
 
 - Name Git as the missing requirement when tracked-file protection cannot run,
   and let dry runs preview without it.

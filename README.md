@@ -15,13 +15,6 @@ an interactive checklist, and commands you can run directly.
 
 [Install](#install) · [Watch the walkthrough](#see-it-work) · [First cleanup](#your-first-cleanup) · [Command reference](docs/usage.md) · [Roadmap](docs/roadmap.md)
 
-> **Release status:** the latest published package is `v0.1.0`. The walkthrough
-> and behavior below describe the newer source on `main`, including lockfile
-> preservation, locked reinstalls, and shared-cache safeguards. These changes
-> are **not yet in Homebrew, Scoop, or installs from the latest published Go tag**.
-> [Build the current source](docs/install.md#build-the-current-source) to try them
-> now, or follow the [changelog](CHANGELOG.md) for the next release.
-
 ## Why use it?
 
 Cache troubleshooting often becomes a long command copied from an old note.
@@ -49,8 +42,7 @@ Expo app installation.*
 
 ## Install
 
-Choose the route for your machine. Package installs below currently provide
-**v0.1.0**; use the source-build instructions above for the new behavior.
+Choose the route for your machine.
 
 ### macOS
 

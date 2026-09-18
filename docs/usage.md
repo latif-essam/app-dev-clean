@@ -2,9 +2,6 @@
 
 [Back to the README](../README.md) · [First cleanup](quickstart.md)
 
-These commands describe the current source. The published `v0.1.0` predates
-the safety and reinstall changes; build from source to use them before the next release.
-
 ## Usage
 
 ```sh
