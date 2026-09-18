@@ -67,7 +67,7 @@ func metroTarget() detect.Target {
 func rnWatchman(ctx detect.Context) (int64, error) {
 	if !ctx.DryRun {
 		if _, err := exec.LookPath("watchman"); err != nil {
-			fmt.Println("  watchman unavailable; skipping optional watch reset")
+			fmt.Fprintln(clean.Out, "  watchman unavailable; skipping optional watch reset")
 			return 0, nil
 		}
 	}
