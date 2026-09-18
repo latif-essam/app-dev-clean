@@ -107,19 +107,19 @@ func Run(args []string, version string) int {
 		fmt.Fprintln(os.Stderr, "error: cleanup cancelled before deletion:", err)
 		return 1
 	}
-	if !o.DryRun && needsConfirm(selected, targets) && !o.AllowShared {
-		if o.Yes {
-			fmt.Fprintln(os.Stderr, "error: shared/global cleanup affects all projects; add --allow-shared explicitly or run interactively")
-			return 2
-		}
+	switch sharedGate(o, selected, targets) {
+	case gateRefuse:
+		fmt.Fprintln(os.Stderr, "error: shared/global cleanup affects all projects; add --allow-shared explicitly or run interactively")
+		return 2
+	case gateAsk:
 		fmt.Printf("Shared/global targets selected: %s\n", strings.Join(selected, " "))
 		if !promptYes(input, "  These affect ALL projects. Proceed? [y/N] ") {
 			fmt.Println("aborted")
 			return 0
 		}
 	}
-	install := o.Reinstall || nuclear
-	if !install && !o.Yes && !o.DryRun && (containsStr(selected, "js") || containsStr(selected, "ios")) {
+	install, ask := reinstallDecision(o, selected, nuclear)
+	if ask {
 		install = promptYes(input, "Reinstall selected dependencies from existing lockfiles after cleanup? [y/N] ")
 	}
 	var actions []reinstall.Action
@@ -327,6 +327,36 @@ func expandCombos(requested []string, local []detect.Target, contexts ...detect.
 		}
 	}
 	return out
+}
+
+// gate is what the shared/global selection requires before anything is deleted.
+type gate int
+
+const (
+	gateProceed gate = iota
+	gateRefuse
+	gateAsk
+)
+
+func sharedGate(o Options, selected []string, local []detect.Target) gate {
+	if o.DryRun || o.AllowShared || !needsConfirm(selected, local) {
+		return gateProceed
+	}
+	if o.Yes {
+		return gateRefuse
+	}
+	return gateAsk
+}
+
+// reinstallDecision reports whether to reinstall, and whether to ask first.
+func reinstallDecision(o Options, selected []string, nuclear bool) (install, ask bool) {
+	if o.Reinstall || nuclear {
+		return true, false
+	}
+	if o.Yes || o.DryRun {
+		return false, false
+	}
+	return false, containsStr(selected, "js") || containsStr(selected, "ios")
 }
 
 func needsConfirm(selected []string, local []detect.Target) bool {
