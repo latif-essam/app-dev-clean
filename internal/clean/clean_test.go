@@ -84,12 +84,12 @@ func TestExecStreamsChildOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldStdout, oldStderr := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = stdout, stderr
-	t.Cleanup(func() { os.Stdout, os.Stderr = oldStdout, oldStderr })
+	oldStdout, oldStderr, oldOut := os.Stdout, os.Stderr, Out
+	os.Stdout, os.Stderr, Out = stdout, stderr, stdout
+	t.Cleanup(func() { os.Stdout, os.Stderr, Out = oldStdout, oldStderr, oldOut })
 
 	Exec(false, t.TempDir(), os.Args[0], "-test.run=^TestExecStreamsChildOutput$")
-	os.Stdout, os.Stderr = oldStdout, oldStderr
+	os.Stdout, os.Stderr, Out = oldStdout, oldStderr, oldOut
 	if err := stdout.Close(); err != nil {
 		t.Fatal(err)
 	}

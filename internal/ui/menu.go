@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/latif-essam/app-dev-clean/internal/clean"
 	"github.com/latif-essam/app-dev-clean/internal/detect"
 )
 
@@ -16,6 +17,14 @@ type Row struct {
 	Label  string
 	Desc   string
 	Header string // non-empty => section header (not selectable)
+	Paths  []string
+}
+
+func targetPaths(t detect.Target, ctx detect.Context) []string {
+	if t.Paths == nil {
+		return nil
+	}
+	return t.Paths(ctx)
 }
 
 func Rows(local, globals []detect.Target, ctx detect.Context) []Row {
@@ -33,7 +42,7 @@ func Rows(local, globals []detect.Target, ctx detect.Context) []Row {
 				rows = append(rows, Row{Header: section.title})
 				added = true
 			}
-			rows = append(rows, Row{Target: t.Name, Label: t.Label, Desc: t.Desc, Scope: t.Scope})
+			rows = append(rows, Row{Target: t.Name, Label: t.Label, Desc: t.Desc, Scope: t.Scope, Paths: targetPaths(t, ctx)})
 		}
 	}
 	var avail []detect.Target
@@ -45,7 +54,7 @@ func Rows(local, globals []detect.Target, ctx detect.Context) []Row {
 	if len(avail) > 0 {
 		rows = append(rows, Row{Header: "GLOBAL (shared across ALL projects)"})
 		for _, g := range avail {
-			rows = append(rows, Row{Target: g.Name, Label: g.Label, Desc: g.Desc, Scope: g.Scope})
+			rows = append(rows, Row{Target: g.Name, Label: g.Label, Desc: g.Desc, Scope: g.Scope, Paths: targetPaths(g, ctx)})
 		}
 	}
 	rows = append(rows, Row{Header: "COMBOS"})
@@ -60,12 +69,31 @@ type model struct {
 	checked map[int]bool
 	done    bool
 	quit    bool
+	sizes   map[int]int64
 }
 
 func newModel(rows []Row) model {
-	m := model{rows: rows, checked: map[int]bool{}}
+	m := model{rows: rows, checked: map[int]bool{}, sizes: map[int]int64{}}
 	m.cursor = m.firstSelectable(0, 1)
 	return m
+}
+
+// sizeMsg carries a row's measured size back to the menu.
+type sizeMsg struct {
+	row  int
+	size int64
+}
+
+// measure walks a row's paths off the render loop; a large cache can take
+// seconds and the menu stays usable meanwhile.
+func measure(row int, paths []string) tea.Cmd {
+	return func() tea.Msg {
+		var total int64
+		for _, p := range paths {
+			total += clean.Size(p)
+		}
+		return sizeMsg{row: row, size: total}
+	}
 }
 
 func (m model) firstSelectable(from, dir int) int {
@@ -110,9 +138,21 @@ func (m model) selectedTargets() []string {
 	return out
 }
 
-func (m model) Init() tea.Cmd { return nil }
+func (m model) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	for i, r := range m.rows {
+		if len(r.Paths) > 0 {
+			cmds = append(cmds, measure(i, r.Paths))
+		}
+	}
+	return tea.Batch(cmds...)
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if sz, ok := msg.(sizeMsg); ok {
+		m.sizes[sz.row] = sz.size
+		return m, nil
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return m, nil
@@ -159,10 +199,28 @@ var (
 	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 )
 
+// sizeText is blank for rows that clean no paths, and "..." until measured.
+func (m model) sizeText(row int) string {
+	if len(m.rows[row].Paths) == 0 {
+		return ""
+	}
+	size, ok := m.sizes[row]
+	if !ok {
+		return "..."
+	}
+	return clean.Human(size)
+}
+
 func (m model) View() string {
 	var b strings.Builder
 	b.WriteString(headerStyle.Render("  app-dev-clean") + "\n")
 	b.WriteString("  up/down move · SPACE toggle · a local only · n none · ENTER run · q quit\n\n")
+	desc := 0
+	for _, r := range m.rows {
+		if r.Header == "" && len(r.Desc) > desc {
+			desc = len(r.Desc)
+		}
+	}
 	for i, r := range m.rows {
 		if r.Header != "" {
 			b.WriteString("\n  " + headerStyle.Render(r.Header) + "\n")
@@ -173,7 +231,7 @@ func (m model) View() string {
 			mark = "x"
 		}
 		pointer := "  "
-		label := fmt.Sprintf("%-14s %s", r.Label, r.Desc)
+		label := strings.TrimRight(fmt.Sprintf("%-14s %-*s %9s", r.Label, desc, r.Desc, m.sizeText(i)), " ")
 		if i == m.cursor {
 			pointer = cursorStyle.Render("> ")
 			label = cursorStyle.Render(label)

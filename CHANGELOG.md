@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Show each menu entry's reclaimable size, measured in the background.
+- Add `--json` for a machine-readable plan or result, with progress on stderr.
+
 ## v0.2.0 - 2026-09-18
 
 - Name Git as the missing requirement when tracked-file protection cannot run,

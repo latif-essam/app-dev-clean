@@ -11,6 +11,10 @@ import (
 	"strings"
 )
 
+// Out receives progress output. JSON mode points it away from stdout so the
+// report stays parseable.
+var Out io.Writer = os.Stdout
+
 // ErrGitUnavailable reports that git is missing, so tracked-file protection
 // could not run.
 var ErrGitUnavailable = errors.New("git executable not found")
@@ -110,7 +114,7 @@ func Remove(dryRun bool, root string, paths ...string) (freed int64, err error) 
 			return freed, err
 		}
 		if !dryRun {
-			fmt.Printf("  removing %s...\n", p)
+			fmt.Fprintf(Out, "  removing %s...\n", p)
 		}
 		sz, err := removeTree(r, rel, dryRun)
 		freed += sz
@@ -118,9 +122,9 @@ func Remove(dryRun bool, root string, paths ...string) (freed int64, err error) 
 			return freed, fmt.Errorf("remove %s: %w", p, err)
 		}
 		if dryRun {
-			fmt.Printf("  [dry-run] would remove %s (%s)\n", p, Human(sz))
+			fmt.Fprintf(Out, "  [dry-run] would remove %s (%s)\n", p, Human(sz))
 		} else {
-			fmt.Printf("  removed %s (%s)\n", p, Human(sz))
+			fmt.Fprintf(Out, "  removed %s (%s)\n", p, Human(sz))
 		}
 	}
 	return freed, nil
@@ -185,15 +189,15 @@ func CheckCommand(name string) error {
 
 func Exec(dryRun bool, dir, name string, args ...string) error {
 	if dryRun {
-		fmt.Printf("  [dry-run] would run in %s: %s %s\n", dir, name, strings.Join(args, " "))
+		fmt.Fprintf(Out, "  [dry-run] would run in %s: %s %s\n", dir, name, strings.Join(args, " "))
 		return nil
 	}
 	cmd, err := Command(dir, name, args...)
 	if err != nil {
 		return err
 	}
-	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, os.Stdin, os.Stdout, os.Stderr
-	fmt.Printf("==> %s %s\n", filepath.Base(name), strings.Join(args, " "))
+	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, os.Stdin, Out, os.Stderr
+	fmt.Fprintf(Out, "==> %s %s\n", filepath.Base(name), strings.Join(args, " "))
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%s failed: %w", name, err)
 	}

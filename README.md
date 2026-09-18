@@ -25,6 +25,7 @@ app-dev-clean brings those operations into one place and makes their scope visib
 - **Choose the scope.** Local targets are separate from caches shared by other projects.
 - **Reinstall deliberately.** Keep the lockfile and use the detected package manager.
 - **See what is happening.** Cleanup steps, subprocess output, and warnings stay in your terminal.
+- **Script it.** `--json` reports the plan or the result for CI and tooling.
 
 This helps reset development state when you suspect stale artifacts. It does
 not diagnose build errors or guarantee that cleaning will fix them.
