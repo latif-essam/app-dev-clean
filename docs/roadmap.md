@@ -8,13 +8,19 @@ The immediate goal is a tested release of the safety improvements already on
 
 ## Release the current improvements
 
-- [ ] Review the unreleased changes and choose the next version.
-- [ ] Finish packaging readiness, including Git runtime availability and the GoReleaser publisher warning.
-- [ ] Run release checks and generate a local release snapshot.
-- [ ] Publish a new immutable tag, archives, and checksums.
-- [ ] Verify the Homebrew tap and Scoop bucket point to that release.
-- [ ] Test fresh installs and upgrades on macOS, Linux, and Windows.
-- [ ] Replace the README's prerelease notice and regenerate the demo against the released binary.
+v0.2.0 published the safety and reinstall work on 2026-09-18.
+
+- [x] Review the unreleased changes and choose the next version.
+- [x] Name Git as a package dependency and report it when the tracked-file check cannot run.
+- [ ] Replace the deprecated GoReleaser `brews` publisher. Deferred: a Cask would
+      quarantine the unsigned binaries, and removing the quarantine attribute is
+      not acceptable. Revisit with code signing, or when `brews` stops working.
+- [x] Run release checks and generate a local release snapshot.
+- [x] Publish a new immutable tag, archives, and checksums.
+- [x] Verify the Homebrew tap and Scoop bucket point to that release.
+- [ ] Test fresh installs and upgrades on Linux and Windows. macOS upgrade verified.
+- [x] Replace the README's prerelease notice.
+- [ ] Regenerate the demo against the released binary.
 
 Follow [PUBLISHING.md](../PUBLISHING.md) for the release procedure. Official
 Homebrew inclusion also has [eligibility and submission requirements](homebrew-core.md);
