@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Name Git as the missing requirement when tracked-file protection cannot run,
+  and let dry runs preview without it.
 - Stream cleanup and install output, including warnings, to the terminal.
 - Reject unknown options, invalid targets, and mismatched project types before cleanup.
 - Validate all selected paths before deletion and confine direct removal to its scope.

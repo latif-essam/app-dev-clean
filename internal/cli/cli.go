@@ -2,8 +2,8 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
-	"github.com/latif-essam/app-dev-clean/internal/reinstall"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +11,7 @@ import (
 	"github.com/latif-essam/app-dev-clean/internal/clean"
 	"github.com/latif-essam/app-dev-clean/internal/detect"
 	"github.com/latif-essam/app-dev-clean/internal/platform"
+	"github.com/latif-essam/app-dev-clean/internal/reinstall"
 	"github.com/latif-essam/app-dev-clean/internal/ui"
 )
 
@@ -196,7 +197,13 @@ func preflight(ctx detect.Context, selected []string, local []detect.Target) err
 		}
 	}
 	if len(localPaths) > 0 {
-		return clean.ProtectTracked(ctx.ProjectRoot, localPaths...)
+		err := clean.ProtectTracked(ctx.ProjectRoot, localPaths...)
+		// A dry run deletes nothing, so warn rather than block the preview.
+		if errors.Is(err, clean.ErrGitUnavailable) && ctx.DryRun {
+			fmt.Fprintln(os.Stderr, "warning: git is unavailable, so Git-tracked files were not checked; this dry run deletes nothing, but install Git before cleaning for real")
+			return nil
+		}
+		return err
 	}
 	return nil
 }
