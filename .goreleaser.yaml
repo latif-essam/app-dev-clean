@@ -37,6 +37,8 @@ brews:
     homepage: "https://github.com/latif-essam/app-dev-clean"
     description: "Cross-platform dev-cache cleaner (RN/Expo/Flutter/native)"
     license: "MIT"
+    dependencies:
+      - name: git
     install: |
       bin.install "app-dev-clean"
       bin.install_symlink "app-dev-clean" => "adc"
@@ -52,6 +54,7 @@ scoops:
     homepage: "https://github.com/latif-essam/app-dev-clean"
     description: "Cross-platform dev-cache cleaner (RN/Expo/Flutter/native)"
     license: "MIT"
+    depends: ["git"]
     # Alias creation is optional; a failed shim must not block installation.
     post_install:
       - '$shims = if ($env:SCOOP) { "$env:SCOOP\shims" } else { "$env:USERPROFILE\scoop\shims" }'
