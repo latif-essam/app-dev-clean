@@ -8,7 +8,8 @@ The immediate goal is a tested release of the safety improvements already on
 
 ## Release the current improvements
 
-v0.2.0 published the safety and reinstall work on 2026-09-18.
+v0.2.0 published the safety and reinstall work on 2026-09-18. v0.3.0 followed
+with menu sizes and `--json`.
 
 - [x] Review the unreleased changes and choose the next version.
 - [x] Name Git as a package dependency and report it when the tracked-file check cannot run.
@@ -32,7 +33,7 @@ distribution through the project's tap can proceed independently.
 - [x] Capture a small CLI walkthrough with a readable still-image alternative.
 - [ ] Record a real-project walkthrough after the release, with visible install logs.
 - [ ] Collect reports from React Native, Expo, Flutter, and native-project users.
-- [ ] Add a concise issue template for environment details and reproducible failures.
+- [x] Add a concise issue template for environment details and reproducible failures.
 
 ## Investigate after feedback
 

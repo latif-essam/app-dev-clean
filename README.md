@@ -30,6 +30,9 @@ app-dev-clean brings those operations into one place and makes their scope visib
 This helps reset development state when you suspect stale artifacts. It does
 not diagnose build errors or guarantee that cleaning will fix them.
 
+Removal is permanent. Files are deleted, not moved to the Trash or Recycle Bin,
+so preview with `--dry-run` when a target is unfamiliar.
+
 ## See it work
 
 ![A four-step walkthrough: detect an Expo project, preview JS cleanup, run cleanup and npm reinstall, then verify the source and lockfile remain unchanged.](docs/media/walkthrough.gif)
