@@ -84,7 +84,7 @@ func TestSafetyBeforeCleanup(t *testing.T) {
 			}
 		}
 	})
-	t.Run("failed command preserves remaining artifacts", func(t *testing.T) {
+	t.Run("failed gradlew clean still removes build output", func(t *testing.T) {
 		dir := safetyProject(t)
 		wrapper, body := "gradlew", "#!/bin/sh\necho fixture failure >&2\nexit 7\n"
 		if runtime.GOOS == "windows" {
@@ -96,11 +96,13 @@ func TestSafetyBeforeCleanup(t *testing.T) {
 		cmd := exec.Command(bin, "android", "-y")
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
-		if err == nil || strings.Contains(string(out), "Done. Reclaimed") || !strings.Contains(string(out), "fixture failure") {
-			t.Fatalf("failed external command must fail ADC: %v %s", err, out)
+		// gradlew clean is best effort: its failure is reported and skipped,
+		// and the build directories are still removed.
+		if err != nil || !strings.Contains(string(out), "fixture failure") || !strings.Contains(string(out), "gradlew clean failed") {
+			t.Fatalf("failed gradlew clean must be reported and skipped: %v %s", err, out)
 		}
-		if _, err := os.Stat(filepath.Join(dir, "android", "build", "fixture")); err != nil {
-			t.Fatalf("command failure must stop target cleanup: %v", err)
+		if _, err := os.Stat(filepath.Join(dir, "android", "build", "fixture")); !os.IsNotExist(err) {
+			t.Fatalf("build output must be removed after gradlew clean fails: %v", err)
 		}
 	})
 	t.Run("nuclear and nested root resolution", func(t *testing.T) {

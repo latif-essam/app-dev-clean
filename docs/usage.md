@@ -83,12 +83,12 @@ app-dev-clean js -y --json | jq .freedTotal
 |---|---|---|
 | React Native, Expo | `js` | `node_modules` |
 | React Native, Expo | `metro` | Shared `metro-*`, `haste-map-*`, and `metro-cache` in the temporary directory |
-| React Native, Expo | `android` | Native build output under `android/`, plus `gradlew clean` if present |
+| React Native, Expo | `android` | Native build output under `android/`, plus best-effort `gradlew clean` if present (a failure is warned about and skipped; directories are still removed) |
 | React Native, Expo | `ios` | `ios/build`, `ios/Pods`, `ios/.build` |
 | React Native | `watchman` | The current project's watch; skipped if Watchman is absent |
 | Expo | `expo` | `.expo`, `.expo-shared` |
 | Flutter | `flutter` | `build`, `.dart_tool`, plus `flutter clean` |
-| Android | `android` | `build`, `app/build`, `.gradle`, `.cxx`, `app/.cxx`, plus `gradlew clean` if present |
+| Android | `android` | `build`, `app/build`, `.gradle`, `.cxx`, `app/.cxx`, plus best-effort `gradlew clean` if present (a failure is warned about and skipped; directories are still removed) |
 | Xcode/SwiftPM | `ios` | `build`, `Pods`, `.build` |
 
 Global targets are `gradle-global`, `xcode-dd`, `pods-cache`, and `pub-cache`.
